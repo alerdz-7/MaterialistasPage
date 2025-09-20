@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Modelos · Línea 17</title>
+
+  <!-- Estilos en RAÍZ -->
+  <link rel="stylesheet" href="../../style.css" />
+  <link rel="stylesheet" href="../../style-modelos.css" />
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <header class="navbar">
+    <div class="logo"><img src="../../img/logo.png" alt="Logo"></div>
+    <h1 class="title">MATERIALISTAS PAGE</h1>
+    <button class="btn-agregar" onclick="history.back()">VOLVER</button>
+  </header>
+
+  <!-- TÍTULO -->
+  <h2 id="lineTitle" class="detalle-titulo">MODELOS · Línea 18</h2>
+
+  <!-- GRID de modelos -->
+  <main id="modelsGrid" class="grid-container-detalle" style="max-width:720px;"></main>
+
+  <!-- Panel acciones -->
+  <aside class="panel-acciones">
+    <button class="btn-agregar" id="btn-add">AGREGAR MODELO</button>
+  </aside>
+
+  <!-- Firebase config (RAÍZ) -->
+  <script type="module" src="../../firebase-config.js"></script>
+
+  <!-- Lógica -->
+  <script type="module">
+    import { db } from "../../firebase-config.js";
+    import { collection, query, orderBy, onSnapshot } 
+      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    // ==== Constantes de esta página ====
+    const KB_ID   = "HA";   // carpeta KB (HA en tu árbol)
+    const LINE_ID = "L18";  // esta línea
+    document.getElementById("lineTitle").textContent = "MODELOS · Línea 17";
+
+    // ==== Botón "Agregar modelo" ====
+    document.getElementById("btn-add").addEventListener("click", () => {
+      // nuevomodelo.html está en la RAÍZ
+      window.location.href = `../../nuevomodelo.html?kb=${KB_ID}&line=${LINE_ID}`;
+    });
+
+    // ==== Cargar modelos desde: KB/<KB_ID>/lines/<LINE_ID>/models ====
+    const modelsRef = collection(db, "KB", KB_ID, "lines", LINE_ID, "models");
+    const q = query(modelsRef, orderBy("createdAt", "asc"));
+
+    const grid = document.getElementById("modelsGrid");
+    onSnapshot(q, (snap) => {
+      grid.innerHTML = "";
+      if (snap.empty) {
+        grid.innerHTML = "<p>No hay modelos aún.</p>";
+        return;
+      }
+      snap.forEach(docSnap => {
+        const data = docSnap.data();
+        const btn = document.createElement("button");
+        btn.className = "grid-btn";
+        btn.textContent = data.display || data.name || "(sin nombre)";
+        // Ir al detalle del modelo (si más adelante creas modelo.html)
+        btn.onclick = () => {
+          window.location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${docSnap.id}`;
+        };
+        grid.appendChild(btn);
+      });
+    });
+  </script>
+</body>
+</html>

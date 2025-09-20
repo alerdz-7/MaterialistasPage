@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Modelos — L17 (HA)</title>
+  <link rel="stylesheet" href="../../style.css" />
+  <link rel="stylesheet" href="../../style-modelos.css" />
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo"><img src="../../img/logo.png" alt="Logo"></div>
+    <h1 class="title">MODELOS</h1>
+    <button class="btn-agregar" onclick="history.back()">ATRÁS</button>
+  </header>
+
+  <main class="grid-container-detalle" id="modelsGrid" aria-live="polite"></main>
+
+  <aside class="panel-acciones">
+    <button class="btn btn-compact" onclick="window.location.href='../../311.html'">311</button>
+    <button class="btn" onclick="window.location.href='../../nuevomodelo.html?kb=HA&line=L17'">AGREGAR MODELO</button>
+  </aside>
+
+  <script type="module" src="../../firebase-config.js"></script>
+  <script type="module">
+    import { db } from "../../firebase-config.js";
+    import { collection, query, orderBy, onSnapshot }
+      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    const KB_ID="HA", LINE_ID="L17";
+    const grid = document.getElementById("modelsGrid");
+    const q = query(collection(db,"KB",KB_ID,"lines",LINE_ID,"models"), orderBy("createdAt","asc"));
+
+    onSnapshot(q, snap => {
+      const items = []; snap.forEach(d => items.push({id:d.id, ...d.data()}));
+      grid.innerHTML = items.length
+        ? items.map(m => `
+            <button class="grid-btn"
+              onclick="window.location.href='../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${m.id}'"
+              title="${m.name || m.display}">
+              ${m.name || m.display}
+            </button>`).join("")
+        : `<button class="grid-btn" disabled style="opacity:.7">(Sin modelos aún)</button>`;
+    });
+  </script>
+</body>
+</html>
