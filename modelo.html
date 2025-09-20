@@ -11,21 +11,31 @@
     .tabla th, .tabla td { border:1px solid rgba(0,0,0,.35); padding:10px 12px; background: rgba(255,255,255,0.08); }
     .tabla thead th { background: rgba(255,255,255,0.18); }
     .controls { display:flex; gap:16px; align-items:center; justify-content:center; margin: 16px auto; }
-    .qty { padding:10px 14px; border:2px solid #000; border-radius:6px; background:#fff; color:#000; font-weight:700; width:180px; text-align:center; }
+    /* Input para ver hasta 5 dígitos completos */
+    .qty{
+      width: 9ch; min-width: 9ch;
+      padding:10px 14px; border:2px solid #000; border-radius:6px;
+      background:#fff; color:#000; font-weight:700; text-align:center;
+      font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
     .right-actions { display:flex; gap:18px; justify-content:center; margin: 20px auto; }
   </style>
 </head>
 <body>
+  <!-- NAVBAR ÚNICA -->
   <header class="navbar">
     <div class="logo"><img src="./img/logo.png" alt="Logo"></div>
-    <h1 class="title" id="titulo">(NOMBRE DEL MODELO)</h1>
-    <button class="btn-agregar" onclick="history.back()">ATRÁS</button>
+    <h1 class="title">MATERIALISTAS PAGE</h1>
+    <button class="btn-agregar" onclick="history.back()">VOLVER</button>
   </header>
+
+  <!-- Título del modelo debajo de la navbar -->
+  <h2 id="titulo" class="detalle-titulo">(NOMBRE DEL MODELO)</h2>
 
   <div class="controls">
     <label class="chip">
       <span>INGRESA CANTIDAD</span>
-      <input class="qty" id="qtyInput" type="number" min="0" value="0" />
+      <input class="qty" id="qtyInput" type="text" inputmode="numeric" pattern="\d{1,5}" maxlength="5" placeholder="00000" size="6" />
     </label>
     <button class="btn btn-compact" id="marcarTodo">MARCAR TODO</button>
   </div>
@@ -51,10 +61,9 @@
   <script type="module" src="./firebase-config.js"></script>
   <script type="module">
     import { db } from "./firebase-config.js";
-    import { doc, getDoc }
-      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+    import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-    const PKEY = "mp311"; // carrito 311 en localStorage
+    const PKEY = "mp311";
 
     const p = new URLSearchParams(location.search);
     const KB   = p.get("kb");
@@ -74,21 +83,25 @@
     const model = snap.data();
 
     titulo.textContent = model.name || model.display || "(Modelo)";
-    let materials = (model.materials || []).map(m => ({ ...m, tengo:false })); // << spread FIX
+    let materials = (model.materials || []).map(m => ({ ...m, tengo:false }));
 
     const calc = (factor, qty) => (Number(factor)||0) * (Number(qty)||0);
 
+    function sanitizeAndGetQty() {
+      const raw = (qtyInput.value || "").replace(/\D/g, "").slice(0, 5);
+      qtyInput.value = raw;
+      return raw ? parseInt(raw, 10) : 0;
+    }
+
     function render() {
-      const qty = Number(qtyInput.value) || 0;
+      const qty = sanitizeAndGetQty();
       tbody.innerHTML = materials.map((m,i)=>`
         <tr>
           <td>${m.name}</td>
           <td>${m.number}</td>
           <td style="text-align:center">${m.factor}</td>
           <td style="text-align:center">${calc(m.factor, qty)}</td>
-          <td style="text-align:center">
-            <input type="checkbox" data-i="${i}" ${m.tengo?"checked":""}/>
-          </td>
+          <td style="text-align:center"><input type="checkbox" data-i="${i}" ${m.tengo?"checked":""}/></td>
         </tr>
       `).join("");
 
@@ -104,15 +117,15 @@
       render();
     };
 
-    editarBtn.onclick = ()=>{ alert("Si quieres, creo una página de edición."); };
+    editarBtn.onclick = ()=>{ alert("¿Quieres que agregue una pantalla de edición?"); };
 
     okBtn.onclick = ()=>{
-      const qty = Number(qtyInput.value) || 0;
-      const cart = JSON.parse(localStorage.getItem(PKEY) || "{}"); // { partNumber: qty }
+      const qty = sanitizeAndGetQty();
+      const cart = JSON.parse(localStorage.getItem(PKEY) || "{}");
       materials.filter(m=>!m.tengo).forEach(m=>{
         const add = calc(m.factor, qty);
         if (!add) return;
-        cart[m.number] = (cart[m.number] || 0) + add; // suma, sin duplicar
+        cart[m.number] = (cart[m.number] || 0) + add;
       });
       localStorage.setItem(PKEY, JSON.stringify(cart));
       window.location.href = `./${KB}/lineas/${LINE.toLowerCase()}.html`;

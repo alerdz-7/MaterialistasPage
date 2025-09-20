@@ -1,251 +1,225 @@
-/* ====== ESTILOS GENERALES ====== */
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background-color: #1e5b73; /* Azul de fondo */
-  color: white;
+/* =========================================================
+   THEME "SIEMENS-LIKE" — Global styles y componentes comunes
+   ========================================================= */
+
+/* Fuente moderna y legible */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+/* Paleta */
+:root{
+  --bg: #0b0d2a;                 /* fondo general (azul muy oscuro) */
+  --surface: #0f163a;            /* superficies/elementos */
+
+  /* Tipografías en color Siemens */
+  --text: #009999;               /* color de texto principal */
+  --muted: #76c9c9;             /* texto suave */
+
+  /* Acentos Siemens Green */
+  --title: #009999;              /* color del título de la navbar */
+  --btn:   #009999;              /* botones */
+  --btn-hover: #008a8a;          /* hover botones */
+  --btn-text: #001f1f;           /* texto del botón (oscuro para contraste) */
+
+  --border: rgba(255,255,255,.12);
+  --shadow: 0 6px 24px rgba(0,0,0,.28);
 }
 
-/* ====== NAVBAR ====== */
-/* ====== NAVBAR ====== */
-/* ====== NAVBAR ====== */
-/* ====== NAVBAR ====== */
-/* ====== NAVBAR ====== */
-/* ====== NAVBAR ====== */
-.navbar {
+*{ box-sizing: border-box; }
+
+html, body{ height: 100%; }
+
+body{
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text); /* << texto en Siemens green */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* h2 SIEMPRE BLANCO (títulos de vistas) */
+h2, .detalle-titulo{ color:#ffffff !important; }
+
+/* ---------------------- NAVBAR ---------------------- */
+.navbar{
   display: flex;
   align-items: center;
-  justify-content: space-between; /* Logo a la izq. y botón a la der. */
-  position: relative;             /* Necesario para centrar el título */
-  padding: 1rem 2rem;
-  background-color: #1e5b73;
+  justify-content: space-between;        /* logo izq / volver der */
+  position: relative;                    /* para centrar el título en desktop */
+  padding: 16px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
-/* Logo a la izquierda */
-.logo img {
-  height: 50px;
+.logo img{
+  height: 52px;
   width: auto;
   object-fit: contain;
 }
 
-/* Título centrado */
-.title {
-  position: absolute;       /* Lo sacamos del flujo */
-  left: 50%;                /* Punto de inicio en el 50% */
-  transform: translateX(-50%); /* Corrección exacta al centro */
-  font-size: 1.5rem;
-  color: #8bc34a;
-  font-weight: bold;
-  white-space: nowrap;      /* Evita que se corte en 2 líneas */
-}
-
-/* Botón VOLVER a la derecha */
-.btn-agregar {
-  background-color: #a3d5ff;
-  color: #000;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  font-weight: bold;
-  cursor: pointer;
-  box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
-}
-.btn-agregar:hover {
-  background-color: #7fc1fa;
-}
-
-
-
-
-
-/* ====== GRID DE BOTONES ====== */
-.grid-container {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-  padding: 2rem;
-}
-
-.grid-btn {
-  background-color: #1e8c6b;
-  border: 2px solid #003f33;
-  color: white;
-  font-weight: bold;
-  font-size: 1.1rem;
-  padding: 1rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s ease-in-out;
-}
-
-.grid-btn:hover {
-  background-color: #14624a;
-}
-
-/* ====== RESPONSIVO ====== */
-@media (max-width: 900px) {
-  .grid-container {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 600px) {
-  .grid-container {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .title {
-    font-size: 1.2rem;
-    text-align: center;
-  }
-}
-
-
-/* ..................................................PÁGINA DE LAS LINEAS*............................................/
-
-/* ====== ESTILOS DE PÁGINAS DE DETALLE ====== */
-.detalle-titulo {
-  text-align: center;
-  color: #ffffff;
-  font-size: 1.8rem;
-  margin-top: 2rem;
-}
-
-.grid-container-detalle {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1rem;
-  max-width: 500px;
-  margin: 2rem auto;
-  padding: 1rem;
-}
-
-
-
-/*PÁGINA DE AGREGAR UN NUEVO MODELO*/
-:root{
-  --bg:#1e5b73;
-  --title:#8bc34a;
-  --btn:#a3d5ff;
-  --text:#ffffff;
-  --border:#000000;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;
-  font-family: Arial, Helvetica, sans-serif;
-  background:var(--bg);
-  color:var(--text);
-}
-.wrap{
-  max-width:980px;
-  margin:40px auto 80px;
-  padding:0 24px;
-}
-h1{
-  text-align:center;
-  color:var(--title);
-  letter-spacing:.5px;
-  margin:0 0 18px;
-}
-
-/* Fila de filtros superiores */
-.top-row{
-  display:flex;
-  justify-content:center;
-  gap:16px;
-  margin:10px 0 28px;
-  flex-wrap:wrap;
-}
-.chip{
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-.chip label{
-  display:inline-block;
-  padding:10px 14px;
-  border:2px solid var(--border);
-  background:#ffffff;
-  color:#000;
-  font-weight:bold;
-  min-width:70px;
-  text-align:center;
-  border-radius:4px;
-}
-.chip input{
-  width:48px;
-  padding:8px 10px;
-  border:2px solid var(--border);
-  border-radius:4px;
-  background:#ffffff;
-  color:#000;
-  font-weight:bold;
-  text-align:center;
-}
-
-/* Campos largos */
-.fields{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:24px;
-  max-width:700px;
-  margin:0 auto 18px;
-}
-.field input{
-  width:100%;
-  padding:14px 16px;
-  border:2px solid var(--border);
-  border-radius:4px;
-  background:#ffffff;
-  color:#000;
-  font-weight:600;
-  letter-spacing:.3px;
-}
-.actions{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  max-width:700px;
-  margin:18px auto 0;
-}
-.btn{
-  border:none;
-  background:var(--btn);
-  color:#0b0b0b;
-  padding:12px 22px;
-  border-radius:10px;
-  font-weight:bold;
-  cursor:pointer;
-  box-shadow:1px 1px 3px rgba(0,0,0,.35);
-  transition:transform .06s ease;
-}
-.btn:active{ transform:scale(.98); }
-
-
-
-/* .................................PÁGINA DE LOS MODELOS DENTRO DE LAS LINEAS DE KB*............................................/
-/* ---- Centrar el título en la navbar sin mover logo/volver ---- */
-.navbar { position: relative; }
-.navbar .title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+.title{
+  position: absolute; left: 50%; transform: translateX(-50%);
   margin: 0;
+  color: var(--title);                    /* << Siemens green */
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  font-size: 1.8rem;
+  white-space: nowrap;
 }
 
-/* ---- Panel inferior derecho (311 y Agregar Modelo) ---- */
-.panel-acciones {
+/* Botón genérico + variantes */
+.btn, .btn-agregar, .grid-btn{
+  appearance: none;
+  border: 2px solid rgba(0,153,153,.28);
+  background: var(--btn);                /* << Siemens green */
+  color: var(--btn-text);                /* texto oscuro para buen contraste */
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform .06s ease, background .15s ease;
+}
+.btn:hover, .btn-agregar:hover, .grid-btn:hover{ background: var(--btn-hover); }
+.btn:active, .btn-agregar:active, .grid-btn:active{ transform: scale(.98); }
+.btn-compact{ padding: 8px 14px; border-radius: 10px; }
+
+/* ---------------------- GRIDS (home / líneas) ---------------------- */
+.grid-container{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 18px;
+  max-width: 1080px;
+  margin: 40px auto;
+  padding: 0 24px;
+}
+.grid-btn{ text-align: center; font-size: 1.05rem; }
+
+/* Grid de modelos dentro de una línea */
+.grid-container-detalle{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  max-width: 800px;
+  margin: 18px auto 32px;
+  padding: 0 24px;
+}
+
+/* Panel (311 / Agregar modelo) */
+.panel-acciones{
   position: fixed;
-  right: 2rem;
-  bottom: 2rem;
+  right: 24px;
+  bottom: 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  z-index: 10;
+  gap: 14px;
+  z-index: 20;
 }
 
-/* Botón compacto para el 311 */
-.btn-compact {
-  padding: 0.4rem 0.9rem;
+/* ---------------------- TÍTULOS DE SECCIÓN ---------------------- */
+.detalle-titulo{
+  text-align: center;
+  margin: 16px 0 18px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+/* ---------------------- TABLAS (modelo / 311) ---------------------- */
+.tabla, .grid-table{
+  width: min(100%, 1080px);
+  margin: 18px auto;
+  border-collapse: collapse;
+  background: transparent;
+}
+.tabla th, .tabla td,
+.grid-table th, .grid-table td{
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  background: rgba(255,255,255,.06);
+  color: var(--text);                    /* texto de celdas en Siemens green */
+}
+.tabla thead th, .grid-table thead th{
+  background: rgba(255,255,255,.12);
+}
+
+/* ---------------------- LAYOUTS GENERALES ---------------------- */
+.wrap{ max-width: 1080px; margin: 32px auto; padding: 0 24px; }
+
+/* Campo numérico visible (hasta 5 dígitos) */
+.qty{
+  width: 9ch; min-width: 9ch;
+  padding: 10px 14px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  background: #fff;
+  color: #000;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+/* Tablet */
+@media (max-width: 960px){
+  .title{ font-size: 1.5rem; }
+  .grid-container{ grid-template-columns: repeat(3, minmax(160px,1fr)); }
+}
+
+/* Celular grande */
+@media (max-width: 720px){
+  /* Navbar en 2 filas: logo + volver arriba, título centrado abajo */
+  .navbar{
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "logo back"
+      "title title";
+    row-gap: 8px;
+    padding: 12px 16px;
+  }
+  .logo{ grid-area: logo; }
+  .navbar .title{
+    grid-area: title;
+    position: static; transform: none;
+    text-align: center; margin: 0; font-size: 1.35rem;
+  }
+  .btn-agregar{ grid-area: back; justify-self: end; padding: 8px 12px; }
+
+  .logo img{ height: 40px; }
+
+  .grid-container{ grid-template-columns: repeat(2, minmax(150px,1fr)); }
+  .grid-container-detalle{ grid-template-columns: repeat(2, minmax(180px,1fr)); }
+
+  /* Botonera flotante abajo centrada */
+  .panel-acciones{
+    left: 50%; right: auto; transform: translateX(-50%);
+    flex-direction: row; gap: 10px; bottom: 12px;
+  }
+
+  /* Tablas con scroll horizontal si no caben */
+  .tabla, .grid-table{
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    width: 100%;
+  }
+  .tabla th, .tabla td, .grid-table th, .grid-table td{
+    padding: 10px 12px;
+  }
+
+  .qty{ width: 8ch; }
+}
+
+/* Celular chico */
+@media (max-width: 480px){
+  .logo img{ height: 34px; }
+  .navbar .title{ font-size: 1.15rem; }
+  .grid-container{ grid-template-columns: 1fr; }
+  .grid-container-detalle{ grid-template-columns: 1fr; }
+  .btn, .grid-btn{ width: 100%; }
 }
