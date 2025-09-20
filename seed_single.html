@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Seed Firestore - MaterialistasPage</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{font-family:Arial, sans-serif;background:#0f3341;color:#fff;margin:0;padding:24px}
+    .card{max-width:840px;margin:0 auto;background:#13475a;border-radius:14px;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+    h1{margin:0 0 8px;color:#8bc34a}
+    button{background:#a3d5ff;border:0;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer}
+    .log{white-space:pre-wrap;background:#0c2630;border-radius:10px;padding:12px;margin-top:14px;max-height:320px;overflow:auto}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Seed Firestore</h1>
+    <p>Crea la estructura <code>KB → lines</code> en Firestore para <b>MaterialistasPage</b>.</p>
+    <button id="runBtn">Crear estructura</button>
+    <div id="status" class="log"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, serverTimestamp } 
+      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    // ⚠️ PEGA AQUÍ TU CONFIG DE FIREBASE
+const firebaseConfig = {
+  apiKey: "AIzaSyB58ojfz5unPkb9BiTFwAOX1Gm9PaLgktg",
+  authDomain: "materialistapage.firebaseapp.com",
+  projectId: "materialistapage",
+  storageBucket: "materialistapage.firebasestorage.app",
+  messagingSenderId: "988439912442",
+  appId: "1:988439912442:web:6369f68cd16741b44ece43",
+  measurementId: "G-D7JY670L6R"
+};
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // ======= ESTRUCTURA KB → Líneas =======
+    const STRUCTURE = {
+      SWITCHES: ["KITS", "4X", "DOUBLETROWN", "FK", "TFP", "LIGHTDUTY"],
+      AFCI: ["L1", "L2", "EPOLE"],
+      LV: ["L1"],
+      QR: ["L1"],
+      BRANCH: ["L1"],
+      MAIN: ["L1"],
+      HA: ["L17", "L18", "L19", "L20", "L22"],
+      TWINS: ["L13"],
+      QUADS: ["L14"],
+      SURGE: ["L15"],
+      DOSPOLOS: ["L6", "L7", "L8", "L9", "L10", "L11"],
+      UNPOLO: ["L1", "L2", "L3", "L4", "L5"]
+    };
+
+    const logEl = document.getElementById("status");
+    const btn   = document.getElementById("runBtn");
+    const log = (m)=> logEl.textContent += m + "\n";
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      log("⏳ Iniciando seed...");
+      try {
+        for (const [kbId, lines] of Object.entries(STRUCTURE)) {
+          log(`📁 KB → ${kbId}`);
+          await setDoc(doc(db, "KB", kbId), {
+            active:true,
+            displayName:kbId,
+            createdAt:serverTimestamp()
+          });
+
+          for (const lineId of lines) {
+            log(`   └─ 📄 line → ${lineId}`);
+            await setDoc(doc(db, "KB", kbId, "lines", lineId), {
+              active:true,
+              createdAt:serverTimestamp()
+            });
+          }
+        }
+        log("\n✅ ¡Listo! Revisa Firestore: KB / <KB> / lines / <Lx>");
+        alert("Seed completado con éxito.");
+      } catch (e) {
+        console.error(e);
+        log("❌ Error: " + (e?.message || e));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

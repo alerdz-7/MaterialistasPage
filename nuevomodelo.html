@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Agregar Modelo</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style-modelos.css" />
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo"><img src="./img/logo.png" alt="Logo"></div>
+    <h1 class="title">MATERIALISTAS PAGE</h1>
+    <button class="btn-agregar" type="button" onclick="history.back()">VOLVER</button>
+  </header>
+
+  <div class="wrap form-wrap">
+    <h1>AGREGA UN MODELO</h1>
+
+    <div class="row-controls">
+      <label for="lineSel" class="lbl">Línea</label>
+      <select id="lineSel" class="btn">
+        <option value="L17">L17</option><option value="L18">L18</option>
+        <option value="L19">L19</option><option value="L20">L20</option>
+        <option value="L22">L22</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <input id="modelName" class="txt" placeholder="NOMBRE DEL MODELO" />
+    </div>
+
+    <!-- 1a fila -->
+    <div class="row row-3" id="firstRow">
+      <input class="txt mat-name"   placeholder="NOMBRE DEL MATERIAL" />
+      <input class="txt mat-number" placeholder="NUMERO DEL MATERIAL" />
+      <div class="mat-factor">
+        <span class="hint">Se multiplica por… ¿?</span>
+        <input type="number" class="txt mat-factor-input" placeholder="NUMERO (factor)" />
+      </div>
+    </div>
+
+    <div id="moreRows" class="materials-wrap"></div>
+
+    <div class="row">
+      <button id="addMat" type="button" class="btn btn-secondary">AGREGAR</button>
+    </div>
+
+    <div class="row end">
+      <button id="save" type="button" class="btn">FINALIZAR</button>
+    </div>
+
+    <p id="status" style="margin-top:10px"></p>
+  </div>
+
+  <script type="module" src="./firebase-config.js"></script>
+  <script type="module">
+    import { db } from "./firebase-config.js";
+    import { collection, addDoc, serverTimestamp }
+      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    const params  = new URLSearchParams(location.search);
+    const KB_ID   = (params.get("kb")   || "HA").trim();
+    const preLine = (params.get("line") || "").trim();
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const lineSel   = document.getElementById("lineSel");
+      const modelName = document.getElementById("modelName");
+      const addMatBtn = document.getElementById("addMat");
+      const saveBtn   = document.getElementById("save");
+      const statusEl  = document.getElementById("status");
+      const moreRows  = document.getElementById("moreRows");
+      if (preLine) lineSel.value = preLine;
+
+      const makeRow = () => {
+        const row = document.createElement("div");
+        row.className = "mat-row";
+        row.innerHTML = `
+          <input class="txt mat-name"   placeholder="NOMBRE DEL MATERIAL" />
+          <input class="txt mat-number" placeholder="NUMERO DEL MATERIAL" />
+          <div class="mat-factor">
+            <span class="hint">Se multiplica por… ¿?</span>
+            <input type="number" class="txt mat-factor-input" placeholder="NUMERO (factor)" />
+          </div>
+          <button class="btn-x" type="button" title="Eliminar">✕</button>
+        `;
+        row.querySelector(".btn-x").onclick = () => row.remove();
+        return row;
+      };
+
+      addMatBtn.onclick = () => { moreRows.appendChild(makeRow()); };
+
+      const collect = () => {
+        const rows = [document.getElementById("firstRow"), ...moreRows.querySelectorAll(".mat-row")];
+        const out = [];
+        for (const r of rows) {
+          const name   = r.querySelector(".mat-name")?.value.trim() ?? "";
+          const number = r.querySelector(".mat-number")?.value.trim() ?? "";
+          const fRaw   = r.querySelector(".mat-factor-input")?.value.trim() ?? "";
+          const factor = Number(fRaw);
+          const any = name || number || fRaw;
+          if (!any) continue;
+          if (!name || !number || isNaN(factor)) {
+            throw new Error("Completa NOMBRE, NÚMERO y un FACTOR numérico en cada fila.");
+          }
+          out.push({ name, number, factor });
+        }
+        return out;
+      };
+
+      saveBtn.onclick = async () => {
+        statusEl.textContent = "";
+        const lineId = lineSel.value;
+        const name   = modelName.value.trim();
+        if (!name) { alert("Escribe el NOMBRE DEL MODELO."); return; }
+
+        let materials;
+        try { materials = collect(); } catch(e){ alert(e.message || e); return; }
+        if (!materials.length) { alert("Agrega al menos un material."); return; }
+
+        try {
+          await addDoc(collection(db, "KB", KB_ID, "lines", lineId, "models"), {
+            name, display: name, materials, createdAt: serverTimestamp()
+          });
+          statusEl.textContent = "✅ Modelo guardado.";
+          window.location.href = `./${KB_ID}/lineas/${lineId.toLowerCase()}.html`;
+        } catch (e) {
+          console.error(e);
+          statusEl.textContent = "❌ Error al guardar: " + (e?.message || e);
+          alert("Error al guardar. Revisa la consola.");
+        }
+      };
+    });
+  </script>
+</body>
+</html>

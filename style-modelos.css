@@ -1,0 +1,113 @@
+/* ===== Estilos extra para Agregar Modelo y Modelo ===== */
+
+.form-wrap h1 {
+  color: var(--title);
+  text-align: center;
+  margin: 10px 0 24px;
+}
+
+.row { display:flex; gap:16px; margin:10px 0; align-items:center; }
+.row.end { justify-content:flex-end; }
+.row-3 { display:grid; grid-template-columns: 1fr 1fr 180px; gap:16px; }
+
+.row-controls { display:flex; align-items:center; gap:12px; margin:4px 0 16px; }
+.lbl { font-weight:bold; }
+
+.txt {
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color:#000;
+  font-weight: 600;
+  width: 100%;
+}
+
+.btn-secondary {
+  background:#a3d5ff;
+  color:#000;
+  border:none;
+  border-radius:10px;
+  padding:10px 18px;
+  font-weight:bold;
+  cursor:pointer;
+  box-shadow:1px 1px 3px rgba(0,0,0,.35);
+}
+
+.hint {
+  color: var(--title);
+  font-weight: 800;
+  letter-spacing: .3px;
+  user-select: none;
+}
+
+.mat-list { margin-top:10px; }
+.grid-table { width:100%; border-collapse:collapse; }
+.grid-table th, .grid-table td {
+  border:1px solid rgba(0,0,0,.35);
+  padding:10px 12px;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+.grid-table thead th { background: rgba(255,255,255,0.18); }
+
+.btn-x {
+  border:none;
+  background:#e46b6b;
+  color:#fff;
+  padding:6px 10px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+
+/* Hint debajo del campo factor en la PÁGINA DE AGREGAR MODELO */
+/* Contenedor del factor para poder poner el hint debajo */
+.col-factor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;              /* separa el input del hint */
+}
+
+/* Hint debajo del campo factor */
+.hint {
+  display: block;
+  font-size: 0.85rem;
+  color: #8bc34a;        /* si lo prefieres gris: #aaa */
+  font-style: italic;
+  line-height: 1.2;
+  margin-left: 2px;
+}
+
+/* CAMPOS DINAMICOS EN AGREGAR MODELO */
+.mat-row{
+      display:grid;
+      grid-template-columns: 1fr 1fr 240px 36px; /* nombre | número | factor(+hint) | X */
+      gap:12px;
+      align-items:start;
+      margin-bottom:10px;
+    }
+    .mat-factor{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .hint{
+      display:block;
+      font-size:.85rem;
+      color:#8bc34a;
+      font-style:italic;
+      line-height:1.2;
+      margin-left:2px;
+    }
+    .btn-x{
+      background:#c0392b;
+      color:#fff;
+      border:none;
+      border-radius:8px;
+      width:36px;height:36px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .btn-x:hover{ filter:brightness(.95); }
+    .materials-wrap{ margin-top:8px; }

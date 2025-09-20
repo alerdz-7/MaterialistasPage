@@ -1,0 +1,251 @@
+/* ====== ESTILOS GENERALES ====== */
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #1e5b73; /* Azul de fondo */
+  color: white;
+}
+
+/* ====== NAVBAR ====== */
+/* ====== NAVBAR ====== */
+/* ====== NAVBAR ====== */
+/* ====== NAVBAR ====== */
+/* ====== NAVBAR ====== */
+/* ====== NAVBAR ====== */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Logo a la izq. y botón a la der. */
+  position: relative;             /* Necesario para centrar el título */
+  padding: 1rem 2rem;
+  background-color: #1e5b73;
+}
+
+/* Logo a la izquierda */
+.logo img {
+  height: 50px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Título centrado */
+.title {
+  position: absolute;       /* Lo sacamos del flujo */
+  left: 50%;                /* Punto de inicio en el 50% */
+  transform: translateX(-50%); /* Corrección exacta al centro */
+  font-size: 1.5rem;
+  color: #8bc34a;
+  font-weight: bold;
+  white-space: nowrap;      /* Evita que se corte en 2 líneas */
+}
+
+/* Botón VOLVER a la derecha */
+.btn-agregar {
+  background-color: #a3d5ff;
+  color: #000;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+}
+.btn-agregar:hover {
+  background-color: #7fc1fa;
+}
+
+
+
+
+
+/* ====== GRID DE BOTONES ====== */
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  padding: 2rem;
+}
+
+.grid-btn {
+  background-color: #1e8c6b;
+  border: 2px solid #003f33;
+  color: white;
+  font-weight: bold;
+  font-size: 1.1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.grid-btn:hover {
+  background-color: #14624a;
+}
+
+/* ====== RESPONSIVO ====== */
+@media (max-width: 900px) {
+  .grid-container {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .grid-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .title {
+    font-size: 1.2rem;
+    text-align: center;
+  }
+}
+
+
+/* ..................................................PÁGINA DE LAS LINEAS*............................................/
+
+/* ====== ESTILOS DE PÁGINAS DE DETALLE ====== */
+.detalle-titulo {
+  text-align: center;
+  color: #ffffff;
+  font-size: 1.8rem;
+  margin-top: 2rem;
+}
+
+.grid-container-detalle {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  max-width: 500px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+
+
+
+/*PÁGINA DE AGREGAR UN NUEVO MODELO*/
+:root{
+  --bg:#1e5b73;
+  --title:#8bc34a;
+  --btn:#a3d5ff;
+  --text:#ffffff;
+  --border:#000000;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family: Arial, Helvetica, sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+.wrap{
+  max-width:980px;
+  margin:40px auto 80px;
+  padding:0 24px;
+}
+h1{
+  text-align:center;
+  color:var(--title);
+  letter-spacing:.5px;
+  margin:0 0 18px;
+}
+
+/* Fila de filtros superiores */
+.top-row{
+  display:flex;
+  justify-content:center;
+  gap:16px;
+  margin:10px 0 28px;
+  flex-wrap:wrap;
+}
+.chip{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.chip label{
+  display:inline-block;
+  padding:10px 14px;
+  border:2px solid var(--border);
+  background:#ffffff;
+  color:#000;
+  font-weight:bold;
+  min-width:70px;
+  text-align:center;
+  border-radius:4px;
+}
+.chip input{
+  width:48px;
+  padding:8px 10px;
+  border:2px solid var(--border);
+  border-radius:4px;
+  background:#ffffff;
+  color:#000;
+  font-weight:bold;
+  text-align:center;
+}
+
+/* Campos largos */
+.fields{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:24px;
+  max-width:700px;
+  margin:0 auto 18px;
+}
+.field input{
+  width:100%;
+  padding:14px 16px;
+  border:2px solid var(--border);
+  border-radius:4px;
+  background:#ffffff;
+  color:#000;
+  font-weight:600;
+  letter-spacing:.3px;
+}
+.actions{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  max-width:700px;
+  margin:18px auto 0;
+}
+.btn{
+  border:none;
+  background:var(--btn);
+  color:#0b0b0b;
+  padding:12px 22px;
+  border-radius:10px;
+  font-weight:bold;
+  cursor:pointer;
+  box-shadow:1px 1px 3px rgba(0,0,0,.35);
+  transition:transform .06s ease;
+}
+.btn:active{ transform:scale(.98); }
+
+
+
+/* .................................PÁGINA DE LOS MODELOS DENTRO DE LAS LINEAS DE KB*............................................/
+/* ---- Centrar el título en la navbar sin mover logo/volver ---- */
+.navbar { position: relative; }
+.navbar .title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+}
+
+/* ---- Panel inferior derecho (311 y Agregar Modelo) ---- */
+.panel-acciones {
+  position: fixed;
+  right: 2rem;
+  bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 10;
+}
+
+/* Botón compacto para el 311 */
+.btn-compact {
+  padding: 0.4rem 0.9rem;
+}

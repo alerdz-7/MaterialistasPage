@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Modelo</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style-modelos.css" />
+  <style>
+    .tabla { width: min(100%, 980px); margin: 20px auto; border-collapse: collapse; }
+    .tabla th, .tabla td { border:1px solid rgba(0,0,0,.35); padding:10px 12px; background: rgba(255,255,255,0.08); }
+    .tabla thead th { background: rgba(255,255,255,0.18); }
+    .controls { display:flex; gap:16px; align-items:center; justify-content:center; margin: 16px auto; }
+    .qty { padding:10px 14px; border:2px solid #000; border-radius:6px; background:#fff; color:#000; font-weight:700; width:180px; text-align:center; }
+    .right-actions { display:flex; gap:18px; justify-content:center; margin: 20px auto; }
+  </style>
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo"><img src="./img/logo.png" alt="Logo"></div>
+    <h1 class="title" id="titulo">(NOMBRE DEL MODELO)</h1>
+    <button class="btn-agregar" onclick="history.back()">ATRÁS</button>
+  </header>
+
+  <div class="controls">
+    <label class="chip">
+      <span>INGRESA CANTIDAD</span>
+      <input class="qty" id="qtyInput" type="number" min="0" value="0" />
+    </label>
+    <button class="btn btn-compact" id="marcarTodo">MARCAR TODO</button>
+  </div>
+
+  <table class="tabla" id="tbl">
+    <thead>
+      <tr>
+        <th>MATERIAL</th>
+        <th>NÚMERO DE PARTE</th>
+        <th>FACTOR</th>
+        <th>CANTIDAD</th>
+        <th>TENGO</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="right-actions">
+    <button class="btn" id="editar">EDITAR MODELO</button>
+    <button class="btn" id="okBtn">OK</button>
+  </div>
+
+  <script type="module" src="./firebase-config.js"></script>
+  <script type="module">
+    import { db } from "./firebase-config.js";
+    import { doc, getDoc }
+      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    const PKEY = "mp311"; // carrito 311 en localStorage
+
+    const p = new URLSearchParams(location.search);
+    const KB   = p.get("kb");
+    const LINE = p.get("line");
+    const ID   = p.get("id");
+
+    const titulo   = document.getElementById("titulo");
+    const qtyInput = document.getElementById("qtyInput");
+    const tbody    = document.querySelector("#tbl tbody");
+    const marcarTodoBtn = document.getElementById("marcarTodo");
+    const okBtn    = document.getElementById("okBtn");
+    const editarBtn= document.getElementById("editar");
+
+    const ref  = doc(db, "KB", KB, "lines", LINE, "models", ID);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) { alert("Modelo no encontrado"); history.back(); throw new Error("No model"); }
+    const model = snap.data();
+
+    titulo.textContent = model.name || model.display || "(Modelo)";
+    let materials = (model.materials || []).map(m => ({ ...m, tengo:false })); // << spread FIX
+
+    const calc = (factor, qty) => (Number(factor)||0) * (Number(qty)||0);
+
+    function render() {
+      const qty = Number(qtyInput.value) || 0;
+      tbody.innerHTML = materials.map((m,i)=>`
+        <tr>
+          <td>${m.name}</td>
+          <td>${m.number}</td>
+          <td style="text-align:center">${m.factor}</td>
+          <td style="text-align:center">${calc(m.factor, qty)}</td>
+          <td style="text-align:center">
+            <input type="checkbox" data-i="${i}" ${m.tengo?"checked":""}/>
+          </td>
+        </tr>
+      `).join("");
+
+      tbody.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+        cb.onchange = ()=> { materials[+cb.dataset.i].tengo = cb.checked; };
+      });
+    }
+
+    qtyInput.addEventListener("input", render);
+    marcarTodoBtn.onclick = ()=>{
+      const all = materials.every(m=>m.tengo);
+      materials.forEach(m=> m.tengo = !all);
+      render();
+    };
+
+    editarBtn.onclick = ()=>{ alert("Si quieres, creo una página de edición."); };
+
+    okBtn.onclick = ()=>{
+      const qty = Number(qtyInput.value) || 0;
+      const cart = JSON.parse(localStorage.getItem(PKEY) || "{}"); // { partNumber: qty }
+      materials.filter(m=>!m.tengo).forEach(m=>{
+        const add = calc(m.factor, qty);
+        if (!add) return;
+        cart[m.number] = (cart[m.number] || 0) + add; // suma, sin duplicar
+      });
+      localStorage.setItem(PKEY, JSON.stringify(cart));
+      window.location.href = `./${KB}/lineas/${LINE.toLowerCase()}.html`;
+    };
+
+    render();
+  </script>
+</body>
+</html>
