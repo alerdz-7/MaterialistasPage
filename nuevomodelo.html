@@ -9,9 +9,11 @@
 </head>
 <body>
   <header class="navbar">
-    <div class="logo"><img src="./img/logo.png" alt="Logo"></div>
+    <a class="logo" href="./index.html" title="Ir al inicio">
+      <img src="./img/logo.png" alt="Logo">
+    </a>
     <h1 class="title">MATERIALISTAS PAGE</h1>
-    <button class="btn-agregar" type="button" onclick="history.back()">VOLVER</button>
+    <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
   </header>
 
   <div class="wrap form-wrap">
@@ -62,6 +64,12 @@
     const params  = new URLSearchParams(location.search);
     const KB_ID   = (params.get("kb")   || "HA").trim();
     const preLine = (params.get("line") || "").trim();
+
+    // VOLVER determinístico
+    document.getElementById("backBtn").onclick = () => {
+      if (preLine) location.href = `./${KB_ID}/lineas/${preLine.toLowerCase()}.html`;
+      else         location.href = "./index.html";
+    };
 
     window.addEventListener("DOMContentLoaded", () => {
       const lineSel   = document.getElementById("lineSel");
@@ -123,7 +131,7 @@
             name, display: name, materials, createdAt: serverTimestamp()
           });
           statusEl.textContent = "✅ Modelo guardado.";
-          window.location.href = `./${KB_ID}/lineas/${lineId.toLowerCase()}.html`;
+          location.href = `./${KB_ID}/lineas/${lineId.toLowerCase()}.html`;
         } catch (e) {
           console.error(e);
           statusEl.textContent = "❌ Error al guardar: " + (e?.message || e);

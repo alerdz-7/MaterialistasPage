@@ -3,14 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Modelos · Línea 17</title>
-
-  <!-- Estilos en RAÍZ -->
+  <title>Modelos — L17 (HA)</title>
   <link rel="stylesheet" href="../../style.css" />
   <link rel="stylesheet" href="../../style-modelos.css" />
 </head>
 <body>
-
   <!-- NAVBAR -->
   <header class="navbar">
     <div class="logo"><img src="../../img/logo.png" alt="Logo"></div>
@@ -18,59 +15,86 @@
     <button class="btn-agregar" onclick="history.back()">VOLVER</button>
   </header>
 
-  <!-- TÍTULO -->
-  <h2 id="lineTitle" class="detalle-titulo">MODELOS · Línea 18</h2>
+  <!-- Título -->
+  <h2 class="detalle-titulo">MODELOS · Línea 18</h2>
 
-  <!-- GRID de modelos -->
-  <main id="modelsGrid" class="grid-container-detalle" style="max-width:720px;"></main>
+  <!-- Grid de modelos -->
+  <main class="grid-container-detalle" id="modelsGrid" aria-live="polite"></main>
 
-  <!-- Panel acciones -->
+  <!-- Acciones -->
   <aside class="panel-acciones">
-    <button class="btn-agregar" id="btn-add">AGREGAR MODELO</button>
+    <button class="btn btn-compact" onclick="window.location.href='../../311.html?kb=HA&line=L17'">311</button>
+    <button class="btn" onclick="window.location.href='../../nuevomodelo.html?kb=HA&line=L17'">AGREGAR MODELO</button>
   </aside>
 
-  <!-- Firebase config (RAÍZ) -->
+  <!-- Datos -->
   <script type="module" src="../../firebase-config.js"></script>
-
-  <!-- Lógica -->
   <script type="module">
     import { db } from "../../firebase-config.js";
-    import { collection, query, orderBy, onSnapshot } 
-      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+    import {
+      collection, query, orderBy, onSnapshot, deleteDoc, doc
+    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-    // ==== Constantes de esta página ====
-    const KB_ID   = "HA";   // carpeta KB (HA en tu árbol)
-    const LINE_ID = "L18";  // esta línea
-    document.getElementById("lineTitle").textContent = "MODELOS · Línea 17";
-
-    // ==== Botón "Agregar modelo" ====
-    document.getElementById("btn-add").addEventListener("click", () => {
-      // nuevomodelo.html está en la RAÍZ
-      window.location.href = `../../nuevomodelo.html?kb=${KB_ID}&line=${LINE_ID}`;
-    });
-
-    // ==== Cargar modelos desde: KB/<KB_ID>/lines/<LINE_ID>/models ====
-    const modelsRef = collection(db, "KB", KB_ID, "lines", LINE_ID, "models");
-    const q = query(modelsRef, orderBy("createdAt", "asc"));
+    // ======= Cambia SOLO estas constantes al reutilizar =======
+    const KB_ID   = "HA";
+    const LINE_ID = "L18";
+    // ==========================================================
 
     const grid = document.getElementById("modelsGrid");
+    const colRef = collection(db, "KB", KB_ID, "lines", LINE_ID, "models");
+    const q = query(colRef, orderBy("createdAt", "asc"));
+
+    // Render de tarjetas con botón de borrar
     onSnapshot(q, (snap) => {
-      grid.innerHTML = "";
-      if (snap.empty) {
-        grid.innerHTML = "<p>No hay modelos aún.</p>";
+      const items = [];
+      snap.forEach(d => items.push({ id: d.id, ...d.data() }));
+      if (!items.length) {
+        grid.innerHTML = `<button class="grid-btn" disabled style="opacity:.7">(Sin modelos aún)</button>`;
         return;
       }
-      snap.forEach(docSnap => {
-        const data = docSnap.data();
-        const btn = document.createElement("button");
-        btn.className = "grid-btn";
-        btn.textContent = data.display || data.name || "(sin nombre)";
-        // Ir al detalle del modelo (si más adelante creas modelo.html)
-        btn.onclick = () => {
-          window.location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${docSnap.id}`;
-        };
-        grid.appendChild(btn);
-      });
+      grid.innerHTML = items.map(m => `
+        <div class="model-row">
+          <button class="grid-btn model-name"
+                  data-id="${m.id}"
+                  data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}"
+                  title="Abrir modelo">
+            ${m.name || m.display}
+          </button>
+          <button class="btn btn-danger btn-compact del"
+                  data-id="${m.id}"
+                  data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}"
+                  title="Eliminar definitivamente">
+            Eliminar
+          </button>
+        </div>
+      `).join("");
+    });
+
+    // Navegar / Borrar (delegación de eventos)
+    grid.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+
+      const id = btn.dataset.id;
+      const name = btn.dataset.name || 'modelo';
+
+      // Abrir modelo
+      if (btn.classList.contains('model-name')) {
+        location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${id}`;
+        return;
+      }
+
+      // Borrar modelo
+      if (btn.classList.contains('del')) {
+        if (!confirm(`¿Eliminar “${name}”? Esta acción no se puede deshacer.`)) return;
+        try {
+          await deleteDoc(doc(db, "KB", KB_ID, "lines", LINE_ID, "models", id));
+          // onSnapshot actualizará la lista automáticamente
+        } catch (err) {
+          console.error(err);
+          alert("No se pudo eliminar. Revisa tu conexión o permisos.");
+        }
+      }
     });
   </script>
 </body>

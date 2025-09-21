@@ -4,59 +4,175 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Modelos — L17 (HA)</title>
+
+  <!-- Estilos del proyecto -->
   <link rel="stylesheet" href="../../style.css" />
   <link rel="stylesheet" href="../../style-modelos.css" />
+
+  <!-- Font Awesome (ícono de eliminar) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <!-- Micro-estilos para el icono y el modo eliminación -->
+  <style>
+    .grid-container-detalle{max-width:880px}
+    .model-row{ display:flex; align-items:center; gap:10px; }
+    .model-row .model-name{ flex:1; }
+
+    .toolbar{
+      max-width:880px; margin: 0 auto 12px; padding: 0 24px;
+      display:flex; justify-content:flex-end; gap:10px;
+    }
+
+    /* Botón icono borrar (oculto por defecto) */
+    .icon-btn{
+      display:none; /* se muestra al activar modo eliminación */
+      align-items:center; justify-content:center;
+      width:44px; height:44px; border-radius:12px; cursor:pointer;
+      background: rgba(231,76,60,.12);
+      color:#e74c3c; border:2px solid rgba(231,76,60,.28);
+      box-shadow: var(--shadow);
+      transition: transform .06s ease, background .15s ease;
+    }
+    .icon-btn:hover{ background: rgba(231,76,60,.18); }
+    .icon-btn:active{ transform: scale(.98); }
+    .icon-btn .fa-trash{ font-size:18px; line-height:1; }
+
+    /* Al activar el modo eliminación en el grid */
+    .del-on .icon-btn{ display:inline-flex; }
+    .del-on .model-name{ opacity:.9; }
+    .del-on .model-name[disabled]{ opacity:.6; cursor:not-allowed; }
+  </style>
 </head>
 <body>
-  <!-- NAVBAR unificada -->
+  <!-- NAVBAR -->
   <header class="navbar">
-    <div class="logo"><img src="../../img/logo.png" alt="Logo"></div>
+    <!-- Logo -> Inicio general -->
+    <a class="logo" href="../../index.html" title="Ir al inicio">
+      <img src="../../img/logo.png" alt="Logo">
+    </a>
     <h1 class="title">MATERIALISTAS PAGE</h1>
-    <button class="btn-agregar" onclick="history.back()">VOLVER</button>
+    <!-- Volver determinístico a la página de líneas del KB -->
+    <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
   </header>
 
-  <!-- Título de sección -->
-  <h1 style="text-align:center;color:hsl(0, 0%, 100%);margin:16px 0;">MODELOS</h1>
+  <!-- Título -->
+  <h2 class="detalle-titulo">MODELOS · Línea 17</h2>
+
+  <!-- Barra de herramientas (activar modo eliminar) -->
+  <div class="toolbar">
+    <button class="btn btn-danger btn-compact" id="toggleDelete">ELIMINAR ALGÚN MODELO</button>
+  </div>
 
   <!-- Grid de modelos -->
   <main class="grid-container-detalle" id="modelsGrid" aria-live="polite"></main>
 
-  <!-- Acciones -->
+  <!-- Acciones fijas -->
   <aside class="panel-acciones">
-    <!-- 🔻 ahora 311 abierto con el contexto correcto -->
-    <button class="btn btn-compact" onclick="window.location.href='../../311.html?kb=HA&line=L17'">311</button>
-    <button class="btn" onclick="window.location.href='../../nuevomodelo.html?kb=HA&line=L17'">AGREGAR MODELO</button>
+    <button class="btn btn-compact" id="btn311">311</button>
+    <button class="btn" id="btnAgregar">AGREGAR MODELO</button>
   </aside>
 
-  <!-- Datos -->
+  <!-- Data / Firestore -->
   <script type="module" src="../../firebase-config.js"></script>
   <script type="module">
     import { db } from "../../firebase-config.js";
-    import { collection, query, orderBy, onSnapshot }
-      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+    import {
+      collection, query, orderBy, onSnapshot, deleteDoc, doc
+    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-    // ======= Cambia SOLO estas constantes al reutilizar =======
+    // ======= Ajusta estos dos valores al copiar a otras líneas =======
     const KB_ID   = "HA";
     const LINE_ID = "L17";
-    // ==========================================================
+    // ================================================================
+
+    // Botones de navegación determinística
+    document.getElementById("backBtn").onclick   = () => location.href = `../index.html`;
+    document.getElementById("btn311").onclick    = () => location.href = `../../311.html?kb=${KB_ID}&line=${LINE_ID}`;
+    document.getElementById("btnAgregar").onclick= () => location.href = `../../nuevomodelo.html?kb=${KB_ID}&line=${LINE_ID}`;
 
     const grid = document.getElementById("modelsGrid");
+    const toggleDeleteBtn = document.getElementById("toggleDelete");
+
     const colRef = collection(db, "KB", KB_ID, "lines", LINE_ID, "models");
     const q = query(colRef, orderBy("createdAt", "asc"));
 
+    let deleteMode = false;
+
+    const applyDeleteModeUI = () => {
+      if (deleteMode){
+        grid.classList.add('del-on');
+        toggleDeleteBtn.textContent = "CANCELAR ELIMINACIÓN";
+        // deshabilita abrir modelos
+        grid.querySelectorAll('.model-name').forEach(b => b.setAttribute('disabled','disabled'));
+      } else {
+        grid.classList.remove('del-on');
+        toggleDeleteBtn.textContent = "ELIMINAR ALGÚN MODELO";
+        grid.querySelectorAll('.model-name').forEach(b => b.removeAttribute('disabled'));
+      }
+    };
+
+    toggleDeleteBtn.onclick = () => {
+      deleteMode = !deleteMode;
+      applyDeleteModeUI();
+    };
+
+    // Render: botón del modelo + icono de eliminar (oculto por defecto)
     onSnapshot(q, (snap) => {
       const items = [];
       snap.forEach(d => items.push({ id: d.id, ...d.data() }));
 
-      grid.innerHTML = items.length
-        ? items.map(m => `
-            <button class="grid-btn"
-              onclick="window.location.href='../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${m.id}'"
-              title="${m.name || m.display}">
-              ${m.name || m.display}
-            </button>
-          `).join("")
-        : `<button class="grid-btn" disabled style="opacity:.7">(Sin modelos aún)</button>`;
+      if (!items.length) {
+        grid.innerHTML = `<button class="grid-btn" disabled style="opacity:.7">(Sin modelos aún)</button>`;
+        return;
+      }
+
+      grid.innerHTML = items.map(m => `
+        <div class="model-row">
+          <button class="grid-btn model-name"
+                  data-id="${m.id}"
+                  data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}"
+                  title="Abrir modelo">
+            ${m.name || m.display}
+          </button>
+          <button class="icon-btn del"
+                  data-id="${m.id}"
+                  data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}"
+                  aria-label="Eliminar modelo ${m.name || m.display}"
+                  title="Eliminar">
+            <i class="fa-solid fa-trash" aria-hidden="true"></i>
+          </button>
+        </div>
+      `).join("");
+
+      // Reaplica el estado de la UI tras re-render
+      applyDeleteModeUI();
+    });
+
+    // Delegación: abrir modelo o eliminar (según modo)
+    grid.addEventListener('click', async (e) => {
+      const delBtn  = e.target.closest('.icon-btn.del');
+      const nameBtn = e.target.closest('.model-name');
+
+      // Eliminar (sólo en modo delete)
+      if (delBtn && deleteMode) {
+        const id   = delBtn.dataset.id;
+        const name = delBtn.dataset.name || 'modelo';
+        if (!confirm(`¿Eliminar “${name}”? Esta acción no se puede deshacer.`)) return;
+        try {
+          await deleteDoc(doc(db, "KB", KB_ID, "lines", LINE_ID, "models", id));
+          // onSnapshot actualizará la lista
+        } catch (err) {
+          console.error(err);
+          alert("No se pudo eliminar. Revisa tu conexión o permisos.");
+        }
+        return;
+      }
+
+      // Abrir modelo (cuando NO estamos en modo delete)
+      if (nameBtn && !deleteMode) {
+        const id = nameBtn.dataset.id;
+        location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${id}`;
+      }
     });
   </script>
 </body>

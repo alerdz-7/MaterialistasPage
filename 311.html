@@ -12,18 +12,22 @@
     thead th { background: rgba(255,255,255,0.18); }
     .actions { display:flex; gap:16px; justify-content:center; }
     .btn { border:none; background:#009999; color:#001f1f; padding:10px 18px; border-radius:10px; font-weight:bold; cursor:pointer; box-shadow:1px 1px 3px rgba(0,0,0,.35); }
+    .hint { text-align:center; opacity:.75; margin-top:8px; }
   </style>
 </head>
 <body>
   <header class="navbar">
-    <div class="logo"><img src="./img/logo.png" alt="Logo"></div>
+    <a class="logo" href="./index.html" title="Ir al inicio">
+      <img src="./img/logo.png" alt="Logo">
+    </a>
     <h1 class="title">MATERIALISTAS PAGE</h1>
-    <button class="btn-agregar" onclick="history.back()">VOLVER</button>
+    <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
   </header>
 
   <h2 class="detalle-titulo" id="h2">MATERIAL POR PEDIR EN 311</h2>
 
   <div class="wrap">
+    <div id="ctxHint" class="hint"></div>
     <table id="tbl">
       <thead><tr><th>NÚMERO DE PARTE</th><th>CANTIDAD</th></tr></thead>
       <tbody></tbody>
@@ -36,18 +40,41 @@
   </div>
 
   <script type="module">
-    // Lee contexto KB/Línea de la URL
+    // 1) Contexto KB/Línea: URL o último usado (mp311_last)
     const p = new URLSearchParams(location.search);
-    const KB   = p.get("kb")   || "ALL";
-    const LINE = p.get("line") || "ALL";
+    let kb   = p.get("kb");
+    let line = p.get("line");
+    if (!kb || !line) {
+      try {
+        const last = JSON.parse(localStorage.getItem("mp311_last") || "{}");
+        kb   = kb   || last.kb;
+        line = line || last.line;
+      } catch {}
+    }
+    kb   = kb   || "ALL";
+    line = line || "ALL";
 
-    // 🔑 Carrito por KB y Línea
-    const CART_KEY = `mp311_${KB}_${LINE}`;
+    const CART_KEY = `mp311_${kb}_${line}`;
+    const h2   = document.getElementById("h2");
+    const hint = document.getElementById("ctxHint");
+    const backBtn = document.getElementById("backBtn");
 
-    // Muestra contexto en el H2
-    const h2 = document.getElementById("h2");
-    h2.textContent = `MATERIAL POR PEDIR EN 311 — ${KB} / ${LINE}`;
+    // Título + hint
+    h2.textContent = `MATERIAL POR PEDIR EN 311 — ${kb} / ${line}`;
+    hint.textContent = (kb==="ALL"||line==="ALL")
+      ? "Tip: abre 311 desde el botón de la línea para ver su carrito."
+      : "";
 
+    // 2) VOLVER determinístico (no usamos history)
+    backBtn.onclick = () => {
+      if (kb !== "ALL" && line !== "ALL") {
+        location.href = `./${kb}/lineas/${line.toLowerCase()}.html`;
+      } else {
+        location.href = "./index.html";
+      }
+    };
+
+    // 3) Render de tabla + acciones
     const tbody   = document.querySelector("#tbl tbody");
     const copyBtn = document.getElementById("copyBtn");
     const clearBtn= document.getElementById("clearBtn");
