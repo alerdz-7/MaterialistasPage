@@ -11,25 +11,19 @@
     .tabla th, .tabla td { border:1px solid rgba(0,0,0,.35); padding:10px 12px; background: rgba(255,255,255,0.08); }
     .tabla thead th { background: rgba(255,255,255,0.18); }
     .controls { display:flex; gap:16px; align-items:center; justify-content:center; margin: 16px auto; }
-    /* Input para ver hasta 5 dígitos completos */
-    .qty{
-      width: 9ch; min-width: 9ch;
-      padding:10px 14px; border:2px solid #000; border-radius:6px;
-      background:#fff; color:#000; font-weight:700; text-align:center;
-      font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace;
-    }
+    .qty{ width: 9ch; min-width: 9ch; padding:10px 14px; border:2px solid #000; border-radius:6px;
+          background:#fff; color:#000; font-weight:700; text-align:center;
+          font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; }
     .right-actions { display:flex; gap:18px; justify-content:center; margin: 20px auto; }
   </style>
 </head>
 <body>
-  <!-- NAVBAR ÚNICA -->
   <header class="navbar">
     <div class="logo"><img src="./img/logo.png" alt="Logo"></div>
     <h1 class="title">MATERIALISTAS PAGE</h1>
     <button class="btn-agregar" onclick="history.back()">VOLVER</button>
   </header>
 
-  <!-- Título del modelo debajo de la navbar -->
   <h2 id="titulo" class="detalle-titulo">(NOMBRE DEL MODELO)</h2>
 
   <div class="controls">
@@ -63,12 +57,13 @@
     import { db } from "./firebase-config.js";
     import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-    const PKEY = "mp311";
-
     const p = new URLSearchParams(location.search);
     const KB   = p.get("kb");
     const LINE = p.get("line");
     const ID   = p.get("id");
+
+    // 🔑 Carrito 311 por KB y Línea
+    const CART_KEY = `mp311_${KB}_${LINE}`;
 
     const titulo   = document.getElementById("titulo");
     const qtyInput = document.getElementById("qtyInput");
@@ -121,13 +116,13 @@
 
     okBtn.onclick = ()=>{
       const qty = sanitizeAndGetQty();
-      const cart = JSON.parse(localStorage.getItem(PKEY) || "{}");
+      const cart = JSON.parse(localStorage.getItem(CART_KEY) || "{}"); // { partNumber: qty }
       materials.filter(m=>!m.tengo).forEach(m=>{
         const add = calc(m.factor, qty);
         if (!add) return;
-        cart[m.number] = (cart[m.number] || 0) + add;
+        cart[m.number] = (cart[m.number] || 0) + add; // suma sin duplicar
       });
-      localStorage.setItem(PKEY, JSON.stringify(cart));
+      localStorage.setItem(CART_KEY, JSON.stringify(cart));
       window.location.href = `./${KB}/lineas/${LINE.toLowerCase()}.html`;
     };
 

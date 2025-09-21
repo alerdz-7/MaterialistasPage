@@ -11,19 +11,17 @@
     th, td { border:1px solid rgba(0,0,0,.35); padding:10px 12px; background: rgba(255,255,255,0.08); }
     thead th { background: rgba(255,255,255,0.18); }
     .actions { display:flex; gap:16px; justify-content:center; }
-    .btn { border:none; background:#a3d5ff; color:#000; padding:10px 18px; border-radius:10px; font-weight:bold; cursor:pointer; box-shadow:1px 1px 3px rgba(0,0,0,.35); }
+    .btn { border:none; background:#009999; color:#001f1f; padding:10px 18px; border-radius:10px; font-weight:bold; cursor:pointer; box-shadow:1px 1px 3px rgba(0,0,0,.35); }
   </style>
 </head>
 <body>
-  <!-- NAVBAR unificada -->
   <header class="navbar">
     <div class="logo"><img src="./img/logo.png" alt="Logo"></div>
     <h1 class="title">MATERIALISTAS PAGE</h1>
     <button class="btn-agregar" onclick="history.back()">VOLVER</button>
   </header>
 
-  <!-- Título específico de esta página -->
-  <h2 class="detalle-titulo">MATERIAL POR PEDIR EN 311</h2>
+  <h2 class="detalle-titulo" id="h2">MATERIAL POR PEDIR EN 311</h2>
 
   <div class="wrap">
     <table id="tbl">
@@ -38,13 +36,24 @@
   </div>
 
   <script type="module">
-    const PKEY = "mp311";
-    const tbody = document.querySelector("#tbl tbody");
+    // Lee contexto KB/Línea de la URL
+    const p = new URLSearchParams(location.search);
+    const KB   = p.get("kb")   || "ALL";
+    const LINE = p.get("line") || "ALL";
+
+    // 🔑 Carrito por KB y Línea
+    const CART_KEY = `mp311_${KB}_${LINE}`;
+
+    // Muestra contexto en el H2
+    const h2 = document.getElementById("h2");
+    h2.textContent = `MATERIAL POR PEDIR EN 311 — ${KB} / ${LINE}`;
+
+    const tbody   = document.querySelector("#tbl tbody");
     const copyBtn = document.getElementById("copyBtn");
-    const clearBtn = document.getElementById("clearBtn");
+    const clearBtn= document.getElementById("clearBtn");
 
     function loadCart() {
-      const cart = JSON.parse(localStorage.getItem(PKEY) || "{}");
+      const cart = JSON.parse(localStorage.getItem(CART_KEY) || "{}");
       const entries = Object.entries(cart);
       tbody.innerHTML = entries.length
         ? entries.map(([part, qty])=> `<tr><td>${part}</td><td style="text-align:center">${qty}</td></tr>`).join("")
@@ -64,7 +73,7 @@
     };
     clearBtn.onclick = ()=>{
       if (!confirm("¿Vaciar 311?")) return;
-      localStorage.removeItem(PKEY);
+      localStorage.removeItem(CART_KEY);
       loadCart();
     };
 
