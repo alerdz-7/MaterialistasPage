@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Modelos — L19 (HA)</title>
+
+  <link rel="stylesheet" href="../../style.css" />
+  <link rel="stylesheet" href="../../style-modelos.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    .btn.btn-danger{ background:#c0392b; color:#fff; border:2px solid rgba(192,57,43,.25); }
+    .btn.btn-danger:hover{ background:#a93226; }
+    .btn.btn-danger:focus{ outline:2px solid rgba(192,57,43,.55); outline-offset:2px; }
+
+    .grid-container-detalle{max-width:880px}
+    .model-row{ display:flex; align-items:center; gap:10px; }
+    .model-row .model-name{ flex:1; }
+    .toolbar{ max-width:880px; margin:0 auto 12px; padding:0 24px; display:flex; justify-content:flex-end; gap:10px; }
+
+    .icon-btn{
+      display:none; align-items:center; justify-content:center;
+      width:44px; height:44px; border-radius:12px; cursor:pointer;
+      background: rgba(231,76,60,.12); color:#e74c3c; border:2px solid rgba(231,76,60,.28);
+      box-shadow: var(--shadow); transition: transform .06s ease, background .15s ease;
+    }
+    .icon-btn:hover{ background: rgba(231,76,60,.18); }
+    .icon-btn:active{ transform: scale(.98); }
+    .icon-btn .fa-trash{ font-size:18px; line-height:1; }
+
+    .del-on .icon-btn{ display:inline-flex; }
+    .del-on .model-name{ opacity:.9; }
+    .del-on .model-name[disabled]{ opacity:.6; cursor:not-allowed; }
+  </style>
+</head>
+<body>
+  <header class="navbar">
+    <a class="logo" href="../../index.html" title="Ir al inicio">
+      <img src="../../img/logo.png" alt="Logo">
+    </a>
+    <h1 class="title">MATERIALISTAS PAGE</h1>
+    <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
+  </header>
+
+  <h2 class="detalle-titulo">MODELOS · Línea 19</h2>
+
+  <div class="toolbar">
+    <button class="btn btn-danger btn-compact" id="toggleDelete">ELIMINAR ALGÚN MODELO</button>
+  </div>
+
+  <main class="grid-container-detalle" id="modelsGrid" aria-live="polite"></main>
+
+  <aside class="panel-acciones">
+    <button class="btn btn-compact" id="btn311">311</button>
+    <button class="btn" id="btnAgregar">AGREGAR MODELO</button>
+  </aside>
+
+  <script type="module" src="../../firebase-config.js"></script>
+  <script type="module">
+    import { db } from "../../firebase-config.js";
+    import { collection, query, orderBy, onSnapshot, deleteDoc, doc }
+      from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    const KB_ID = "HA";
+    const LINE_ID = "L19";
+
+    document.getElementById("backBtn").onclick   = () => location.href = `../index.html`;
+    document.getElementById("btn311").onclick    = () => location.href = `../../311.html?kb=${KB_ID}&line=${LINE_ID}`;
+    document.getElementById("btnAgregar").onclick= () => location.href = `../../nuevomodelo.html?kb=${KB_ID}&line=${LINE_ID}`;
+
+    const grid = document.getElementById("modelsGrid");
+    const toggleDeleteBtn = document.getElementById("toggleDelete");
+
+    const q = query(collection(db, "KB", KB_ID, "lines", LINE_ID, "models"), orderBy("createdAt", "asc"));
+
+    let deleteMode = false;
+    const applyDeleteModeUI = () => {
+      if (deleteMode){
+        grid.classList.add('del-on'); toggleDeleteBtn.textContent = "CANCELAR ELIMINACIÓN";
+        grid.querySelectorAll('.model-name').forEach(b => b.setAttribute('disabled','disabled'));
+      } else {
+        grid.classList.remove('del-on'); toggleDeleteBtn.textContent = "ELIMINAR ALGÚN MODELO";
+        grid.querySelectorAll('.model-name').forEach(b => b.removeAttribute('disabled'));
+      }
+    };
+    toggleDeleteBtn.onclick = () => { deleteMode = !deleteMode; applyDeleteModeUI(); };
+
+    onSnapshot(q, (snap) => {
+      const items = []; snap.forEach(d => items.push({ id:d.id, ...d.data() }));
+      grid.innerHTML = items.length ? items.map(m => `
+        <div class="model-row">
+          <button class="grid-btn model-name" data-id="${m.id}" data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}" title="Abrir modelo">
+            ${m.name || m.display}
+          </button>
+          <button class="icon-btn del" data-id="${m.id}" data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}" aria-label="Eliminar modelo ${m.name || m.display}" title="Eliminar">
+            <i class="fa-solid fa-trash" aria-hidden="true"></i>
+          </button>
+        </div>`).join("")
+        : `<button class="grid-btn" disabled style="opacity:.7">(Sin modelos aún)</button>`;
+      applyDeleteModeUI();
+    });
+
+    grid.addEventListener('click', async (e) => {
+      const delBtn  = e.target.closest('.icon-btn.del');
+      const nameBtn = e.target.closest('.model-name');
+
+      if (delBtn && deleteMode) {
+        const id = delBtn.dataset.id; const name = delBtn.dataset.name || 'modelo';
+        if (!confirm(`¿Eliminar “${name}”? Esta acción no se puede deshacer.`)) return;
+        try { await deleteDoc(doc(db, "KB", KB_ID, "lines", LINE_ID, "models", id)); } 
+        catch (err) { console.error(err); alert("No se pudo eliminar."); }
+        return;
+      }
+
+      if (nameBtn && !deleteMode) {
+        const id = nameBtn.dataset.id;
+        location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${id}`;
+      }
+    });
+  </script>
+</body>
+</html>

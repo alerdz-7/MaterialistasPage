@@ -1,40 +1,40 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>1 POLO</title>
-  <link rel="stylesheet" href="../style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>1 POLO · Líneas</title>
+
+  <!-- Estilos globales -->
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="../style-modelos.css" />
 </head>
 <body>
   <!-- NAVBAR -->
   <header class="navbar">
-    <!-- Logo a la izquierda -->
-    <div class="logo">
+    <!-- Logo -> Inicio global -->
+    <a class="logo" href="../index.html" title="Ir al inicio">
       <img src="../img/logo.png" alt="Logo">
-    </div>
-
-    <!-- Contenedor central solo para el título -->
-    <div class="navbar-center">
-      <h1 class="title">MATERIALISTAS PAGE</h1>
-    </div>
-
-    <!-- Botón volver a la derecha -->
-    <div class="navbar-right">
-      <button class="btn-agregar" onclick="window.location.href='../index.html'">VOLVER</button>
-    </div>
+    </a>
+    <h1 class="title">MATERIALISTAS PAGE</h1>
+    <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
   </header>
 
-  <!-- TÍTULO -->
   <h2 class="detalle-titulo">Líneas de 1 POLO</h2>
 
-  <!-- GRID DE BOTONES -->
-  <main class="grid-container-detalle">
-    <button class="grid-btn">L1</button>
-    <button class="grid-btn">L2</button>
-    <button class="grid-btn">L3</button>
-    <button class="grid-btn">L4</button>
-    <button class="grid-btn">L5</button>
+  <main class="grid-container" aria-live="polite">
+    <button class="grid-btn" onclick="location.href='lineas/l1.html'">L1</button>
+    <button class="grid-btn" onclick="location.href='lineas/l2.html'">L2</button>
+    <button class="grid-btn" onclick="location.href='lineas/l3.html'">L3</button>
+    <button class="grid-btn" onclick="location.href='lineas/l4.html'">L4</button>
+    <button class="grid-btn" onclick="location.href='lineas/l5.html'">L5</button>
   </main>
+
+  <script>
+    // Volver determinístico al index global
+    document.getElementById('backBtn').addEventListener('click', () => {
+      location.href = '../index.html';
+    });
+  </script>
 </body>
 </html>

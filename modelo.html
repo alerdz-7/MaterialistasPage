@@ -1,273 +1,223 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Modelo</title>
-  <link rel="stylesheet" href="./style.css" />
-  <link rel="stylesheet" href="./style-modelos.css" />
+
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style-modelos.css"/>
+
   <style>
-    .tabla { width: min(100%, 980px); margin: 20px auto; border-collapse: collapse; }
-    .tabla th, .tabla td { border:1px solid rgba(0,0,0,.35); padding:10px 12px; background: rgba(255,255,255,0.08); }
-    .tabla thead th { background: rgba(255,255,255,0.18); }
-    .controls { display:flex; gap:16px; align-items:center; justify-content:center; margin: 16px auto; }
-    .qty{
-      width: 9ch; min-width: 9ch; padding:10px 14px; border:2px solid #000; border-radius:6px;
-      background:#fff; color:#000; font-weight:700; text-align:center;
-      font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace;
-    }
-    .right-actions { display:flex; gap:18px; justify-content:center; margin: 20px auto; }
-    #editor[hidden] { display:none !important; }
+    #qtyInput{ width:92px; text-align:center; font-weight:700; letter-spacing:1px; }
+    .table-wrap{ max-width:1100px; margin:0 auto; }
+    .tbl thead th{ white-space:nowrap; }
+    .tbl td,.tbl th{ text-align:left; }
+    .tbl td.num,.tbl th.num{ text-align:center; }
+    .mini{ opacity:.85; font-size:.9rem }
   </style>
 </head>
 <body>
-  <!-- NAVBAR -->
-  <header class="navbar">
-    <a class="logo" href="./index.html" title="Ir al inicio">
-      <img src="./img/logo.png" alt="Logo">
-    </a>
-    <h1 class="title">MATERIALISTAS PAGE</h1>
-    <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
-  </header>
+<header class="navbar">
+  <a class="logo" href="index.html" title="Ir al inicio">
+    <img src="img/logo.png" alt="Logo">
+  </a>
+  <h1 class="title">MATERIALISTAS PAGE</h1>
+  <button class="btn-agregar" id="btnBack" type="button">VOLVER</button>
+</header>
 
-  <!-- Título del modelo (modo lectura) -->
-  <h2 id="titulo" class="detalle-titulo">(NOMBRE DEL MODELO)</h2>
+<main class="table-wrap">
+  <h2 id="modelTitle" class="detalle-titulo">MODELO</h2>
 
-  <!-- ======= MODO LECTURA ======= -->
-  <section id="viewer">
-    <div class="controls">
-      <label class="chip">
-        <span>INGRESA CANTIDAD</span>
-        <input class="qty" id="qtyInput" type="text" inputmode="numeric" pattern="\d{1,5}" maxlength="5" placeholder="00000" size="6" />
-      </label>
-      <button class="btn btn-compact" id="marcarTodo">MARCAR TODO</button>
-    </div>
+  <div style="display:flex; align-items:center; gap:14px; justify-content:center; margin:12px 0 18px;">
+    <span class="mini">INGRESA CANTIDAD</span>
+    <input id="qtyInput" type="number" inputmode="numeric" min="0" step="1" value="0"/>
+    <button class="btn btn-compact" id="btnToggleAll">MARCAR TODO</button>
+    <button class="btn btn-compact" id="btnEdit">EDITAR MODELO</button>
+  </div>
 
-    <table class="tabla" id="tbl">
+  <div class="tabla tbl">
+    <table>
       <thead>
-        <tr>
-          <th>MATERIAL</th>
-          <th>NÚMERO DE PARTE</th>
-          <th>FACTOR</th>
-          <th>CANTIDAD</th>
-          <th>TENGO</th>
-        </tr>
+      <tr>
+        <th style="width:30%">MATERIAL</th>
+        <th style="width:30%">NÚMERO DE PARTE</th>
+        <th class="num" style="width:10%">FACTOR</th>
+        <th class="num" style="width:15%">CANTIDAD</th>
+        <th class="num" style="width:15%">PEDIR</th>
+      </tr>
       </thead>
-      <tbody></tbody>
+      <tbody id="rows"></tbody>
     </table>
+  </div>
 
-    <div class="right-actions">
-      <button class="btn" id="editar">EDITAR MODELO</button>
-      <button class="btn" id="okBtn">OK</button>
-    </div>
-  </section>
+  <div style="display:flex; justify-content:center; margin:22px 0 54px;">
+    <button class="btn" id="btnOk" type="button">OK</button>
+  </div>
+</main>
 
-  <!-- ======= MODO EDICIÓN ======= -->
-  <section id="editor" class="wrap" hidden>
-    <div class="form-wrap">
-      <h2 class="detalle-titulo">EDITAR MODELO</h2>
+<!-- Firebase -->
+<script type="module" src="firebase-config.js"></script>
+<script type="module">
+  import { db } from "./firebase-config.js";
+  import {
+    doc, getDoc, collection, getDocs, orderBy, query
+  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-      <!-- Nombre del modelo -->
-      <div class="row">
-        <label class="lbl" for="editName">NOMBRE DEL MODELO</label>
-        <input id="editName" class="txt" placeholder="Ej. 805000340101" />
-      </div>
-
-      <!-- Filas de materiales -->
-      <div class="materials-wrap" id="materialsWrap"></div>
-
-      <div class="row end">
-        <button class="btn-secondary" id="addMat" type="button">AGREGAR MATERIAL</button>
-      </div>
-
-      <div class="right-actions">
-        <button class="btn" id="cancelEdit" type="button">CANCELAR</button>
-        <button class="btn" id="saveEdit" type="button">GUARDAR</button>
-      </div>
-    </div>
-  </section>
-
-  <script type="module" src="./firebase-config.js"></script>
-  <script type="module">
-    import { db } from "./firebase-config.js";
-    import {
-      doc, getDoc, updateDoc, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-
-    // Parámetros
+  // --------- Utilidades ---------
+  const qs  = s => document.querySelector(s);
+  const qsa = s => Array.from(document.querySelectorAll(s));
+  function getParams(){
     const p = new URLSearchParams(location.search);
-    const KB   = p.get("kb");
-    const LINE = p.get("line");
-    const ID   = p.get("id");
-
-    // 🔙 VOLVER determinístico
-    document.getElementById("backBtn").onclick = () => {
-      if (KB && LINE) {
-        location.href = `./${KB}/lineas/${LINE.toLowerCase()}.html`;
-      } else {
-        location.href = "./index.html";
-      }
+    return {
+      kb   : p.get('kb')   || 'HA',
+      line : p.get('line') || 'L17',
+      id   : p.get('id')   || ''
     };
+  }
+  const numberFormat = n => (n||0).toLocaleString('es-MX');
 
-    // 🔑 Carrito 311 por KB y Línea
-    const CART_KEY = `mp311_${KB}_${LINE}`;
+  // 311 local por usuario/línea
+  function load311Store(kb,line){
+    try { return JSON.parse(localStorage.getItem(`MP311:${kb}:${line}`) || '{}'); } catch { return {}; }
+  }
+  function save311Store(kb,line,data){
+    localStorage.setItem(`MP311:${kb}:${line}`, JSON.stringify(data));
+  }
 
-    // DOM (lectura)
-    const titulo   = document.getElementById("titulo");
-    const qtyInput = document.getElementById("qtyInput");
-    const tbody    = document.querySelector("#tbl tbody");
-    const marcarTodoBtn = document.getElementById("marcarTodo");
-    const okBtn    = document.getElementById("okBtn");
-    const editarBtn= document.getElementById("editar");
+  // --------- Estado ---------
+  const params = getParams();
+  const titleEl = qs('#modelTitle');
+  const rowsEl  = qs('#rows');
+  const qtyEl   = qs('#qtyInput');
 
-    const viewer   = document.getElementById("viewer");
-    const editor   = document.getElementById("editor");
+  let modelDoc = null;
+  let materials = [];  // {name, number, factor}
 
-    // DOM (edición)
-    const editName = document.getElementById("editName");
-    const materialsWrap = document.getElementById("materialsWrap");
-    const addMatBtn = document.getElementById("addMat");
-    const cancelEditBtn = document.getElementById("cancelEdit");
-    const saveEditBtn   = document.getElementById("saveEdit");
+  // --------- Carga del modelo (con fallback) ---------
+  async function loadModel(){
+    const refKB  = doc(db, 'KB', params.kb, 'lines', params.line, 'models', params.id);
+    const snapKB = await getDoc(refKB);
 
-    // Estado del modelo
-    const ref  = doc(db, "KB", KB, "lines", LINE, "models", ID);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) { alert("Modelo no encontrado"); location.href = `./index.html`; throw new Error("No model"); }
-    let model = snap.data();
-
-    titulo.textContent = model.name || model.display || "(Modelo)";
-    let materials = (model.materials || []).map(m => ({ ...m, tengo:false }));
-
-    // ---------- MODO LECTURA ----------
-    const calc = (factor, qty) => (Number(factor)||0) * (Number(qty)||0);
-
-    function sanitizeAndGetQty() {
-      const raw = (qtyInput.value || "").replace(/\D/g, "").slice(0, 5);
-      qtyInput.value = raw;
-      return raw ? parseInt(raw, 10) : 0;
+    if (snapKB.exists()){
+      modelDoc = snapKB;
+    } else {
+      const refLegacy   = doc(db, 'lines', params.line, 'models', params.id);
+      const snapLegacy  = await getDoc(refLegacy);
+      if (snapLegacy.exists()) modelDoc = snapLegacy;
     }
 
-    function renderViewer() {
-      const qty = sanitizeAndGetQty();
-      tbody.innerHTML = materials.map((m,i)=>`
-        <tr>
-          <td>${m.name}</td>
-          <td>${m.number}</td>
-          <td style="text-align:center">${m.factor}</td>
-          <td style="text-align:center">${calc(m.factor, qty)}</td>
-          <td style="text-align:center"><input type="checkbox" data-i="${i}" ${m.tengo?"checked":""}/></td>
-        </tr>
-      `).join("");
+    if (!modelDoc){
+      titleEl.textContent = 'MODELO (no encontrado)';
+      rowsEl.innerHTML = `<tr><td colspan="5" style="text-align:center; opacity:.75">No se encontró información del modelo.</td></tr>`;
+      return;
+    }
 
-      tbody.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
-        cb.onchange = ()=> { materials[+cb.dataset.i].tengo = cb.checked; };
+    const data = modelDoc.data() || {};
+    titleEl.textContent = (data.name || data.display || 'MODELO').toUpperCase();
+
+    // 1) array embebido
+    materials = Array.isArray(data.materials) ? data.materials.slice() : [];
+
+    // 2) subcolección "materials" como respaldo
+    if (!materials.length){
+      const refBasePath = modelDoc.ref.path.split('/');
+      const col = collection(db, ...refBasePath, 'materials');
+      const q  = query(col, orderBy('name','asc'));
+      const snap = await getDocs(q);
+      snap.forEach(d => {
+        const m = d.data() || {};
+        materials.push({
+          name  : m.name   || '',
+          number: m.number || '',
+          factor: Number(m.factor || 0)
+        });
       });
     }
 
-    qtyInput.addEventListener("input", renderViewer);
-    marcarTodoBtn.onclick = ()=>{
-      const all = materials.every(m=>m.tengo);
-      materials.forEach(m=> m.tengo = !all);
-      renderViewer();
-    };
+    renderRows();
+    updateQuantities();
+  }
 
-    okBtn.onclick = ()=>{
-      const qty = sanitizeAndGetQty();
-      if (!qty || qty <= 0) {
-        alert("Ingresa una cantidad mayor a 0.");
-        return;
+  // --------- Render de filas ---------
+  function renderRows(){
+    if (!materials.length){
+      rowsEl.innerHTML = `<tr><td colspan="5" style="text-align:center; opacity:.75">Este modelo no tiene materiales registrados.</td></tr>`;
+      return;
+    }
+    rowsEl.innerHTML = materials.map((m,idx) => `
+      <tr data-idx="${idx}">
+        <td>${m.name || ''}</td>
+        <td>${m.number || ''}</td>
+        <td class="num">${Number(m.factor||0)}</td>
+        <td class="num"><span class="qty" data-raw="0">0</span></td>
+        <td class="num"><input type="checkbox" class="chk-ask" aria-label="Pedir ${m.name || ''}"></td>
+      </tr>
+    `).join('');
+  }
+
+  // --------- Cálculo de cantidades ---------
+  function updateQuantities(){
+    const baseQty = Math.max(0, Number(qtyEl.value || 0));
+    qsa('#rows tr').forEach(tr => {
+      const idx   = Number(tr.dataset.idx || 0);
+      const f     = Number(materials[idx]?.factor || 0);
+      const total = baseQty * f;
+      const cell  = tr.querySelector('.qty');
+      if (cell){
+        cell.dataset.raw = String(total);
+        cell.textContent = numberFormat(total);
       }
-      const cart = JSON.parse(localStorage.getItem(CART_KEY) || "{}");
-      materials.filter(m=>!m.tengo).forEach(m=>{
-        const add = (Number(m.factor)||0) * qty;
-        if (!add) return;
-        cart[m.number] = (cart[m.number] || 0) + add;
-      });
-      localStorage.setItem(CART_KEY, JSON.stringify(cart));
-      // recuerda el último contexto para 311
-      localStorage.setItem("mp311_last", JSON.stringify({ kb: KB, line: LINE }));
-      // volver a la línea
-      location.href = `./${KB}/lineas/${LINE.toLowerCase()}.html`;
-    };
+    });
+  }
 
-    // ---------- MODO EDICIÓN ----------
-    function createMatRow(data = {name:"", number:"", factor:""}) {
-      const row = document.createElement("div");
-      row.className = "mat-row";
-      row.innerHTML = `
-        <input class="txt mat-name"   placeholder="NOMBRE DEL MATERIAL" value="${(data.name||"").replace(/"/g,'&quot;')}"/>
-        <input class="txt mat-number" placeholder="NÚMERO DEL MATERIAL" value="${(data.number||"").replace(/"/g,'&quot;')}"/>
-        <div class="mat-factor">
-          <span class="hint">Se multiplica por… ¿?</span>
-          <input class="txt mat-factor-input" inputmode="numeric" pattern="\\d+" placeholder="NUMERO (factor)" value="${data.factor ?? ""}"/>
-        </div>
-        <button class="btn-x" type="button" title="Eliminar material">✕</button>
-      `;
-      row.querySelector(".btn-x").onclick = () => row.remove();
-      return row;
+  // --------- Marcar todo ---------
+  let allMarked = false;
+  function toggleAll(){
+    allMarked = !allMarked;
+    qsa('.chk-ask').forEach(chk => chk.checked = allMarked);
+  }
+
+  // --------- OK => manda **SELECCIONADOS** a 311 local ---------
+  function sendTo311(){
+    const baseQty = Math.max(0, Number(qtyEl.value || 0));
+    if (!materials.length || baseQty <= 0){
+      alert('Ingresa una cantidad mayor a 0.');
+      return;
     }
 
-    function loadEditorFromModel() {
-      editName.value = model.name || model.display || "";
-      materialsWrap.innerHTML = "";
-      (model.materials || []).forEach(m => materialsWrap.appendChild(createMatRow(m)));
-      if ((model.materials || []).length === 0) {
-        materialsWrap.appendChild(createMatRow());
-      }
-    }
+    const store = load311Store(params.kb, params.line); // { partNumber: totalQty }
 
-    function showEditor(show) {
-      viewer.hidden = !!show;
-      editor.hidden = !show;
-    }
+    qsa('#rows tr').forEach(tr => {
+      const idx  = Number(tr.dataset.idx || 0);
+      const ask  = tr.querySelector('.chk-ask')?.checked; // ahora SOLO seleccionados
+      if (!ask) return;
 
-    editarBtn.onclick = () => {
-      loadEditorFromModel();
-      showEditor(true);
-      window.scrollTo({top:0, behavior:"smooth"});
-    };
+      const part = (materials[idx]?.number || '').trim();
+      const add  = Number(tr.querySelector('.qty')?.dataset.raw || 0);
 
-    addMatBtn.onclick = () => materialsWrap.appendChild(createMatRow());
-    cancelEditBtn.onclick = () => showEditor(false);
+      if (!part || add <= 0) return;
+      store[part] = (Number(store[part] || 0) + add);
+    });
 
-    async function saveEditor() {
-      const name = editName.value.trim();
-      const rows = Array.from(materialsWrap.querySelectorAll(".mat-row"));
-      const newMaterials = rows.map(r => ({
-        name:   r.querySelector(".mat-name").value.trim(),
-        number: r.querySelector(".mat-number").value.trim(),
-        factor: parseInt((r.querySelector(".mat-factor-input").value || "0").replace(/\D/g,""), 10) || 0
-      }));
+    save311Store(params.kb, params.line, store);
+    // volver a la lista de modelos de la línea
+    history.length > 1 ? history.back() : location.href = `HA/lineas/l17.html`;
+  }
 
-      if (!name) { alert("Ingresa el NOMBRE DEL MODELO."); return; }
-      if (!newMaterials.length) { alert("Agrega al menos un material."); return; }
-      for (const m of newMaterials) {
-        if (!m.name || !m.number) { alert("Cada material debe tener NOMBRE y NÚMERO."); return; }
-        if (!(m.factor > 0)) { alert("El FACTOR debe ser un número mayor a 0."); return; }
-      }
+  // --------- Navegación ---------
+  qs('#btnBack').onclick = () => history.length > 1 ? history.back() : (location.href = 'index.html');
+  qs('#btnEdit').onclick = () => {
+    location.href = `nuevomodelo.html?mode=edit&kb=${params.kb}&line=${params.line}&id=${params.id}`;
+  };
 
-      try {
-        await updateDoc(ref, { name, display: name, materials: newMaterials, updatedAt: serverTimestamp() });
-        model.name = name; model.display = name; model.materials = newMaterials;
-        titulo.textContent = name;
-        materials = newMaterials.map(m => ({ ...m, tengo:false }));
-        showEditor(false);
-        renderViewer();
-        alert("Modelo actualizado.");
-      } catch (err) {
-        console.error(err);
-        alert("No se pudo guardar. Revisa tu conexión o permisos.");
-      }
-    }
+  // --------- Eventos ---------
+  qtyEl.addEventListener('input', updateQuantities);
+  qs('#btnToggleAll').addEventListener('click', toggleAll);
+  qs('#btnOk').addEventListener('click', sendTo311);
 
-    saveEditBtn.onclick = saveEditor;
-
-    // Abrir editor directo con ?edit=1
-    if (p.get("edit") === "1") { loadEditorFromModel(); showEditor(true); window.scrollTo({top:0, behavior:"smooth"}); }
-
-    // Render inicial
-    renderViewer();
-  </script>
+  // Arranque
+  loadModel();
+</script>
 </body>
 </html>

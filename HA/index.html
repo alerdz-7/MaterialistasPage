@@ -3,35 +3,41 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>KB — Líneas</title>
+  <title>HA · Líneas</title>
+
+  <!-- Estilos globales del proyecto (en la raíz) -->
   <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="../style-modelos.css" />
 </head>
 <body>
-  <!-- NAVBAR unificada -->
+  <!-- NAVBAR -->
   <header class="navbar">
-    <div class="logo"><img src="../img/logo.png" alt="Logo Siemens"></div>
+    <!-- Logo -> SIEMPRE al index principal del proyecto -->
+    <a class="logo" href="../index.html" title="Ir al inicio">
+      <img src="../img/logo.png" alt="Logo">
+    </a>
     <h1 class="title">MATERIALISTAS PAGE</h1>
-    <button class="btn-agregar" onclick="window.location.href='../index.html'">VOLVER</button>
+    <!-- Volver determinístico al inicio del proyecto -->
+    <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
   </header>
 
-  <!-- Título de sección -->
-  <h2 class="detalle-titulo" id="kbTitle">Líneas</h2>
+  <!-- Título de la página -->
+  <h2 class="detalle-titulo">Líneas de HA</h2>
 
-  <!-- Grid de botones de líneas -->
-  <main class="grid-container" id="linesGrid"></main>
+  <!-- Grid de líneas -->
+  <main class="grid-container" aria-live="polite">
+    <button class="grid-btn" onclick="window.location.href='lineas/l17.html'">L17</button>
+    <button class="grid-btn" onclick="window.location.href='lineas/l18.html'">L18</button>
+    <button class="grid-btn" onclick="window.location.href='lineas/l19.html'">L19</button>
+    <button class="grid-btn" onclick="window.location.href='lineas/l20.html'">L20</button>
+    <button class="grid-btn" onclick="window.location.href='lineas/l22.html'">L22</button>
+  </main>
 
   <script>
-    /* ========= CONFIGURA ESTO POR CADA KB ========= */
-    const KB_ID = "HA";                           // Ej.: "HA", "LV", "QR", ...
-    const LINES = ["L17","L18","L19","L20","L22"]; // Lista de líneas de ese KB
-    /* ============================================== */
-
-    // Pinta el título y la grilla de líneas
-    document.getElementById("kbTitle").textContent = `Líneas de ${KB_ID}`;
-    const grid = document.getElementById("linesGrid");
-    grid.innerHTML = LINES.map(l =>
-      `<button class="grid-btn" onclick="location.href='lineas/${l.toLowerCase()}.html'">${l}</button>`
-    ).join("");
+    // Botón VOLVER: regreso determinístico al index principal del proyecto
+    document.getElementById('backBtn').addEventListener('click', () => {
+      window.location.href = '../index.html';
+    });
   </script>
 </body>
 </html>

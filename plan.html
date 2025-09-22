@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Plan de hoy</title>
+
+  <!-- Tus estilos -->
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style-modelos.css"/>
+
+  <style>
+    /* Ajustes suaves para esta pantalla sin cambiar tu diseño */
+    .wrap {max-width: 1200px; margin: 0 auto; padding: 0 12px;}
+    .plan-toolbar {display:flex; gap:12px; align-items:center; justify-content:flex-end; margin:10px 0 18px;}
+    .plan-list {display:flex; flex-direction:column; gap:14px;}
+    .plan-row {background:#0f2533; border-radius:12px; padding:12px 12px; display:grid; grid-template-columns: 28px 1fr 160px 1.2fr 44px; gap:12px; align-items:center; box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .plan-row.done {opacity:.5;}
+    .pill {background:#0d8e8a; border-radius:10px; padding:10px 14px; color:#fff; font-weight:700; text-align:center;}
+    .qty-in {width:110px; text-align:center; padding:8px 10px; border-radius:10px; border:none; font-weight:700; letter-spacing:.5px}
+    .changes {border:2px dashed rgba(255,255,255,.18); border-radius:10px; padding:10px 14px; min-height:44px; color:#bde7e5}
+    .trash {width:42px; height:42px; border-radius:10px; background:#2a0e0e; color:#ff6666; border:2px solid #401717; font-weight:900; display:flex; align-items:center; justify-content:center}
+    .drag {cursor:grab; font-size:18px; opacity:.8; padding-left:8px}
+    .drag:active {cursor:grabbing;}
+    .table-card {background:#0f2533; border-radius:14px; padding:16px; margin:24px 0 44px; box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .tbl h3 {margin:0 0 12px}
+    .tbl table {width:100%}
+    .tbl thead th {white-space:nowrap}
+    .right {text-align:right}
+    .center {text-align:center}
+    .mini {opacity:.85; font-size:.95rem}
+    .muted {opacity:.75}
+    .btn-danger {background:#b94136}
+    @media (max-width: 820px){
+      .plan-row {grid-template-columns: 28px 1fr; gap:10px}
+      .plan-row .qty-slot,
+      .plan-row .chg-slot,
+      .plan-row .trash-slot {grid-column: 1 / -1}
+      .plan-row .qty-slot {display:flex; gap:12px; align-items:center;}
+    }
+  </style>
+</head>
+<body>
+<header class="navbar">
+  <a class="logo" href="index.html" title="Ir al inicio">
+    <img src="img/logo.png" alt="Logo">
+  </a>
+  <h1 class="title">MATERIALISTAS PAGE</h1>
+  <button class="btn-agregar" id="btnBack" type="button">VOLVER</button>
+</header>
+
+<main class="wrap">
+  <h2 id="pageTitle" style="text-align:center; margin:10px 0 8px;">PLAN DE HOY</h2>
+  <p id="dateSub" class="mini" style="text-align:center; margin:0 0 8px;"></p>
+
+  <div class="plan-toolbar">
+    <button class="btn" id="btnMaterials"><span style="margin-right:6px">📊</span>MATERIALES</button>
+  </div>
+
+  <section id="planList" class="plan-list" aria-live="polite"></section>
+
+  <!-- MATERIALES AGREGADOS -->
+  <section id="materialsBox" class="table-card" style="display:none;">
+    <div class="tbl">
+      <h3>MATERIALES PARA EL PLAN DE HOY</h3>
+      <p class="mini muted">Las cantidades ya consideran el <b>factor</b> multiplicado por la <b>cantidad</b> de cada modelo.</p>
+      <div style="display:flex; gap:12px; justify-content:flex-end; margin:8px 0 10px">
+        <button class="btn btn-compact" id="btnCheckAllGeneral">MARCAR TODO</button>
+      </div>
+      <div class="tabla">
+        <table>
+          <thead>
+            <tr>
+              <th>MATERIAL</th>
+              <th>NÚMERO DE PARTE</th>
+              <th class="right">CANTIDAD</th>
+              <th class="center">✔</th>
+            </tr>
+          </thead>
+          <tbody id="generalMat"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin:12px 0 0;">
+        <button class="btn" id="btnOKGeneral">OK</button>
+      </div>
+    </div>
+
+    <div class="tbl" style="margin-top:28px;">
+      <h3>KANBAN PARA EL PLAN DE HOY <span class="mini muted">(“base” y “tapa”)</span></h3>
+      <div style="display:flex; gap:12px; justify-content:flex-end; margin:8px 0 10px">
+        <button class="btn btn-compact" id="btnCheckAllKanban">MARCAR TODO</button>
+      </div>
+      <div class="tabla">
+        <table>
+          <thead>
+          <tr>
+            <th>MATERIAL</th>
+            <th>NÚMERO DE PARTE</th>
+            <th class="right">CANTIDAD</th>
+            <th class="center">✔</th>
+          </tr>
+          </thead>
+          <tbody id="kanbanMat"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin:12px 0 0;">
+        <button class="btn" id="btnOKKanban">OK</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Firebase -->
+<script type="module" src="firebase-config.js"></script>
+<script type="module">
+  import { db } from "./firebase-config.js";
+  import {
+    doc, getDoc, setDoc, updateDoc
+  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+  // -------------- Utils --------------
+  const qs = sel => document.querySelector(sel);
+  const qsa = sel => Array.from(document.querySelectorAll(sel));
+  const fmt = n => (n||0).toLocaleString('es-MX');
+  const todayKey = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  const prettyDate = () => new Date().toLocaleDateString('es-MX', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+
+  const getParams = () => {
+    const p = new URLSearchParams(location.search);
+    return { kb: p.get('kb')||'HA', line: p.get('line')||'L17' };
+  };
+
+  // 311 local
+  const load311 = (kb,line) => {
+    try { return JSON.parse(localStorage.getItem(`MP311:${kb}:${line}`) || '{}'); } catch { return {}; }
+  };
+  const save311 = (kb,line,store) => localStorage.setItem(`MP311:${kb}:${line}`, JSON.stringify(store));
+
+  // PLAN local backup
+  const loadPlanLocal = (kb,line,date) => {
+    try { return JSON.parse(localStorage.getItem(`MPPLAN:${kb}:${line}:${date}`) || '[]'); } catch { return []; }
+  };
+  const savePlanLocal = (kb,line,date,arr) => localStorage.setItem(`MPPLAN:${kb}:${line}:${date}`, JSON.stringify(arr));
+
+  // -------- Estado
+  const params = getParams();
+  const dateKey = todayKey();
+  const pageTitle = qs('#pageTitle');
+  const dateSub = qs('#dateSub');
+  const planListEl = qs('#planList');
+
+  let plan = []; // [{id,name,qty,materials:[{name,number,factor}], done:false}]
+
+  pageTitle.textContent = `PLAN DE HOY`;
+  dateSub.textContent = `(${prettyDate()})`;
+
+  // --------- Firestore helpers
+  async function readPlanFS(){
+    const ref = doc(db, 'KB', params.kb, 'lines', params.line, 'plans', dateKey);
+    try{
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return null;
+      const data = snap.data() || {};
+      return Array.isArray(data.items) ? data.items : null;
+    }catch(e){
+      return null;
+    }
+  }
+  async function writePlanFS(items){
+    const ref = doc(db, 'KB', params.kb, 'lines', params.line, 'plans', dateKey);
+    const payload = { items };
+    try{
+      await setDoc(ref, payload, { merge:true });
+    }catch(e){
+      // respaldo local
+    }
+  }
+
+  // --------- Carga de plan
+  async function loadPlan(){
+    let items = await readPlanFS();
+    if (!items) items = loadPlanLocal(params.kb, params.line, dateKey);
+
+    plan = (items || []).map(x => ({
+      id: x.id,
+      name: x.name || x.display || 'SIN NOMBRE',
+      qty: Number(x.qty || 0),
+      done: !!x.done,
+      materials: Array.isArray(x.materials) ? x.materials : []
+    }));
+
+    // Si no hay materiales cargados dentro de items, intenta resolverlos al vuelo (consulta por modelo)
+    for (let i=0;i<plan.length;i++){
+      if (!plan[i].materials?.length){
+        plan[i].materials = await fetchModelMaterials(plan[i].id);
+      }
+    }
+
+    renderPlan();
+    await persistPlan(); // sincroniza a FS + local
+  }
+
+  // Obtiene materiales de un modelo (array o subcolección)
+  async function fetchModelMaterials(modelId){
+    // Primero intenta KB/{kb}/lines/{line}/models/{id}
+    async function readModelDoc(pathArr){
+      try{
+        const ref = doc(db, ...pathArr);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return null;
+        const data = snap.data() || {};
+        let mats = Array.isArray(data.materials) ? data.materials.slice() : [];
+        if (!mats.length){
+          // Sin subcolecciones aquí (por simplicidad); si tus modelos tienen subcolección "materials", puedes extenderlo
+        }
+        return mats.map(m => ({
+          name: m.name || '',
+          number: m.number || '',
+          factor: Number(m.factor || 0)
+        }));
+      }catch{ return null; }
+    }
+
+    let mats = await readModelDoc(['KB', params.kb, 'lines', params.line, 'models', modelId]);
+    if (!mats){
+      mats = await readModelDoc(['lines', params.line, 'models', modelId]); // legado
+    }
+    return mats || [];
+  }
+
+  // --------- Render del plan
+  function renderPlan(){
+    if (!plan.length){
+      planListEl.innerHTML = `<div class="table-card" style="text-align:center; opacity:.75">No hay modelos en el plan de hoy.</div>`;
+      return;
+    }
+
+    planListEl.innerHTML = plan.map((it,idx) => {
+      const chg = changesText(idx);
+      return `
+      <div class="plan-row ${it.done ? 'done':''}" draggable="true" data-idx="${idx}">
+        <div class="center">
+          <input type="checkbox" class="chk-done" ${it.done?'checked':''} title="Hecho">
+        </div>
+        <div class="pill drag" title="Arrastrar para reordenar">⋮⋮ ${sanitize(it.name)}</div>
+        <div class="qty-slot">
+          <input class="qty-in" type="number" min="0" step="1" value="${it.qty}" aria-label="Cantidad">
+        </div>
+        <div class="chg-slot">
+          <div class="changes">${chg}</div>
+        </div>
+        <div class="trash-slot">
+          <button class="trash" title="Eliminar">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Eventos por fila
+    qsa('.plan-row').forEach(row => {
+      const idx = Number(row.dataset.idx);
+      // done
+      row.querySelector('.chk-done')?.addEventListener('change', e=>{
+        plan[idx].done = e.target.checked;
+        row.classList.toggle('done', plan[idx].done);
+        persistPlan();
+      });
+      // qty
+      row.querySelector('.qty-in')?.addEventListener('input', e=>{
+        plan[idx].qty = Math.max(0, Number(e.target.value||0));
+        // no necesitamos recalcular agregados aquí (solo al abrir Materiales)
+        persistPlan();
+      });
+      // trash
+      row.querySelector('.trash')?.addEventListener('click', ()=>{
+        plan.splice(idx,1);
+        renderPlan();
+        persistPlan();
+      });
+
+      // Drag & drop
+      row.addEventListener('dragstart', ev=>{
+        ev.dataTransfer.setData('text/plain', idx.toString());
+        row.style.opacity = .5;
+      });
+      row.addEventListener('dragend', ()=> row.style.opacity = '');
+      row.addEventListener('dragover', ev=> ev.preventDefault());
+      row.addEventListener('drop', ev=>{
+        ev.preventDefault();
+        const from = Number(ev.dataTransfer.getData('text/plain'));
+        const to = Number(row.dataset.idx);
+        if (isNaN(from) || isNaN(to) || from===to) return;
+        const [moved] = plan.splice(from,1);
+        plan.splice(to,0,moved);
+        renderPlan();
+        persistPlan();
+      });
+    });
+  }
+
+  function sanitize(s=''){ return String(s).replace(/[<>&]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c])); }
+
+  // Texto de “materiales que cambian” con respecto al anterior (por número de parte)
+  function changesText(idx){
+    if (idx===0) return 'Modelo de arranque';
+    const prev = plan[idx-1]?.materials || [];
+    const cur  = plan[idx]?.materials  || [];
+    const prevSet = new Set(prev.map(m => (m.number||'').trim()));
+    const changed = cur.filter(m => m.number && !prevSet.has(m.number.trim()));
+
+    if (!changed.length) return 'No cambia nada';
+    return changed.map(m => `${sanitize(m.name)} <span class="muted">(${sanitize(m.number)})</span>`).join(' • ');
+  }
+
+  // --------- MATERIAL AGGREGATION
+  const materialsBox = qs('#materialsBox');
+  const generalEl = qs('#generalMat');
+  const kanbanEl  = qs('#kanbanMat');
+
+  function normalizeName(s=''){
+    // Lowercase, sin tildes, recorta espacios duplicados
+    return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  }
+  function isKanbanName(name=''){
+    const n = normalizeName(name);
+    return /\bbase\b/.test(n) || /\btapa\b/.test(n);
+  }
+
+  function aggregateMaterials(){
+    const agg = {};      // {number: {name, number, total}}
+    const aggKanban = {}; // igual, pero sólo base/tapa
+    for (const it of plan){
+      const q = Number(it.qty||0);
+      if (!q) continue;
+      for (const m of (it.materials||[])){
+        const part = (m.number||'').trim();
+        const f = Number(m.factor||0);
+        const add = q * f;
+        if (!part || add<=0) continue;
+
+        const target = isKanbanName(m.name) ? aggKanban : agg;
+
+        if (!target[part]) target[part] = {name: m.name||'', number: part, total: 0};
+        target[part].total += add;
+      }
+    }
+    return {
+      general: Object.values(agg).sort((a,b)=> a.name.localeCompare(b.name)),
+      kanban : Object.values(aggKanban).sort((a,b)=> a.name.localeCompare(b.name)),
+    };
+  }
+
+  function renderAggregated(){
+    const {general, kanban} = aggregateMaterials();
+
+    generalEl.innerHTML = general.length ? general.map(r=>`
+      <tr>
+        <td>${sanitize(r.name)}</td>
+        <td>${sanitize(r.number)}</td>
+        <td class="right">${fmt(r.total)}</td>
+        <td class="center"><input type="checkbox" class="chk-g"></td>
+      </tr>
+    `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales (asigna cantidades a los modelos)</td></tr>`;
+
+    kanbanEl.innerHTML = kanban.length ? kanban.map(r=>`
+      <tr>
+        <td>${sanitize(r.name)}</td>
+        <td>${sanitize(r.number)}</td>
+        <td class="right">${fmt(r.total)}</td>
+        <td class="center"><input type="checkbox" class="chk-k"></td>
+      </tr>
+    `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales Kanban</td></tr>`;
+  }
+
+  // --------- Persistencia (FS + Local)
+  async function persistPlan(){
+    // Guarda items minimalistas (no duplicamos materiales grandes)
+    const items = plan.map(p => ({
+      id: p.id, name: p.name, qty: Number(p.qty||0), done: !!p.done, materials: p.materials
+    }));
+    savePlanLocal(params.kb, params.line, dateKey, items);
+    await writePlanFS(items).catch(()=>{});
+  }
+
+  // --------- Eventos generales
+  qs('#btnBack').onclick = () => history.length>1 ? history.back() : (location.href='index.html');
+
+  qs('#btnMaterials').onclick = ()=>{
+    materialsBox.style.display = (materialsBox.style.display==='none' || !materialsBox.style.display) ? 'block':'none';
+    if (materialsBox.style.display==='block') renderAggregated();
+  };
+
+  qs('#btnCheckAllGeneral').onclick = ()=> qsa('.chk-g').forEach(c=> c.checked = true);
+  qs('#btnCheckAllKanban').onclick  = ()=> qsa('.chk-k').forEach(c=> c.checked = true);
+
+  qs('#btnOKGeneral').onclick = ()=>{
+    const store = load311(params.kb, params.line);
+    // recorre filas marcadas
+    qsa('#generalMat tr').forEach(tr=>{
+      const chk = tr.querySelector('.chk-g');
+      if (!chk?.checked) return;
+      const num = tr.children[1]?.textContent.trim();
+      const qty = Number((tr.children[2]?.textContent||'0').replace(/[^\d]/g,'')) || 0;
+      if (!num || qty<=0) return;
+      store[num] = Number(store[num]||0) + qty;
+    });
+    save311(params.kb, params.line, store);
+    alert('Material agregado a 311 (general).');
+  };
+
+  qs('#btnOKKanban').onclick = ()=>{
+    const store = load311(params.kb, params.line);
+    qsa('#kanbanMat tr').forEach(tr=>{
+      const chk = tr.querySelector('.chk-k');
+      if (!chk?.checked) return;
+      const num = tr.children[1]?.textContent.trim();
+      const qty = Number((tr.children[2]?.textContent||'0').replace(/[^\d]/g,'')) || 0;
+      if (!num || qty<=0) return;
+      store[num] = Number(store[num]||0) + qty;
+    });
+    save311(params.kb, params.line, store);
+    alert('Material agregado a 311 (Kanban).');
+  };
+
+  // --------- Init
+  loadPlan();
+</script>
+</body>
+</html>
