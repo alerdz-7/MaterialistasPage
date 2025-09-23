@@ -7,110 +7,260 @@
   <link rel="stylesheet" href="style.css"/>
   <link rel="stylesheet" href="style-modelos.css"/>
   <style>
-    .wrap{ max-width:1100px; margin:0 auto; }
-    table{ width:100%; border-collapse:collapse; }
-    th,td{ padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.05); }
-    .qty{ text-align:right; width:160px }
+    .wrap{ max-width:1200px; margin:0 auto; padding:0 12px; }
+    .section{ margin:26px auto 36px; max-width:720px; }
+    .section-head{
+      display:flex; align-items:center; justify-content:space-between; gap:12px; margin:8px 0 10px;
+    }
+    .section-head h3{ margin:0; }
     .actions{ display:flex; gap:10px; }
+    .tabla { margin:0 auto; }        /* centra la tabla */
+    .right{ text-align:right; }
+    .muted{ opacity:.75; }
+    .tiny{ font-size:.9rem; opacity:.8; margin-top:6px; text-align:right; }
+    .empty{ text-align:center; opacity:.7; padding:10px 0; }
   </style>
 </head>
 <body>
 <header class="navbar">
-  <a class="logo" href="index.html"><img src="img/logo.png" alt="Logo"></a>
+  <a class="logo" href="index.html" title="Ir al inicio">
+    <img src="img/logo.png" alt="Logo">
+  </a>
   <h1 class="title">MATERIALISTAS PAGE</h1>
   <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
 </header>
 
 <main class="wrap">
-  <h2 class="detalle-titulo" id="titleH2">MATERIAL POR PEDIR EN 311</h2>
-  <div id="ctxHint" class="muted" style="text-align:center"></div>
+  <h2 id="titleH2" class="detalle-titulo" style="text-align:center; margin:12px 0 2px;">MATERIAL POR PEDIR EN 311</h2>
 
-  <div class="mat-card">
-    <div class="mat-head">
+  <!-- ===== MATERIAL GENERAL ===== -->
+  <section class="section" id="secMain">
+    <div class="section-head">
       <h3>Material</h3>
       <div class="actions">
         <button class="btn" id="copyMain">Copiar</button>
         <button class="btn btn-danger" id="clearMain">Borrar</button>
       </div>
     </div>
-    <table id="tblMain"><thead><tr><th>NÚMERO DE PARTE</th><th class="qty">CANTIDAD</th></tr></thead><tbody></tbody></table>
-    <div id="emptyMain" class="muted" style="text-align:center; display:none">(Vacío)</div>
-  </div>
 
-  <div class="mat-card">
-    <div class="mat-head">
+    <div class="tabla">
+      <table>
+        <thead>
+          <tr>
+            <th>NÚMERO DE PARTE</th>
+            <th class="right">CANTIDAD</th>
+          </tr>
+        </thead>
+        <tbody id="tblMain"></tbody>
+      </table>
+    </div>
+    <div id="emptyMain" class="empty">(Vacío)</div>
+    <div id="copiedMain" class="tiny muted"></div>
+  </section>
+
+  <!-- ===== KANBAN ===== -->
+  <section class="section" id="secKanban">
+    <div class="section-head">
       <h3>Kanban</h3>
       <div class="actions">
         <button class="btn" id="copyKanban">Copiar</button>
         <button class="btn btn-danger" id="clearKanban">Borrar</button>
       </div>
     </div>
-    <table id="tblKanban"><thead><tr><th>NÚMERO DE PARTE</th><th class="qty">CANTIDAD</th></tr></thead><tbody></tbody></table>
-    <div id="emptyKanban" class="muted" style="text-align:center; display:none">(Vacío)</div>
-  </div>
+
+    <div class="tabla">
+      <table>
+        <thead>
+          <tr>
+            <th>NÚMERO DE PARTE</th>
+            <th class="right">CANTIDAD</th>
+          </tr>
+        </thead>
+        <tbody id="tblKanban"></tbody>
+      </table>
+    </div>
+    <div id="emptyKanban" class="empty">(Vacío)</div>
+    <div id="copiedKanban" class="tiny muted"></div>
+  </section>
 </main>
 
+<!-- Firebase -->
+<script type="module" src="firebase-config.js"></script>
 <script type="module">
-  // ---------- Contexto (KB y línea por querystring) ----------
-  const p      = new URLSearchParams(location.search);
-  const kb     = p.get("kb")   || "HA";
-  const line   = p.get("line") || "L17";
+  import { db } from "./firebase-config.js";
+  import {
+    collection, collectionGroup, onSnapshot, getDocs, deleteDoc, doc,
+    orderBy, query, setDoc, serverTimestamp, Timestamp
+  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-  document.getElementById("backBtn").onclick = () => location.href = `${kb}/lineas/${line.toLowerCase()}.html`;
-  document.getElementById("titleH2").textContent = `MATERIAL POR PEDIR EN 311 — ${kb} / ${line}`;
+  // -------- Utilidades --------
+  const fmt = n => (Number(n||0)).toLocaleString("es-MX");
+  const qs  = s => document.querySelector(s);
+  const qsa = s => Array.from(document.querySelectorAll(s));
+  const p   = new URLSearchParams(location.search);
+  const kb   = p.get("kb")   || "HA";
+  const line = p.get("line") || "L17";
 
-  // ---------- Almacenamiento local por dispositivo ----------
-  const KEY = (kind)=> `MP311:${kb}:${line}:${kind}`; // kind: 'main' | 'kanban'
+  // UI base
+  qs("#backBtn").onclick = () => history.length > 1 ? history.back() : (location.href = "index.html");
+  qs("#titleH2").textContent = `MATERIAL POR PEDIR EN 311 — ${kb} / ${line}`;
 
-  function load(kind){
-    try { return JSON.parse(localStorage.getItem(KEY(kind)) || "{}"); }
-    catch { return {}; }
+  const tbodyMain   = qs("#tblMain");
+  const tbodyKanban = qs("#tblKanban");
+
+  // Helpers de pintado
+  function paint(tbody, list){
+    if (!list.length){
+      tbody.innerHTML = "";
+      return;
+    }
+    list.sort((a,b)=> String(a.number).localeCompare(String(b.number)));
+    tbody.innerHTML = list.map(r => `
+      <tr>
+        <td>${r.number}</td>
+        <td class="right">${fmt(r.qty)}</td>
+      </tr>
+    `).join("");
   }
-  function save(kind, obj){
-    localStorage.setItem(KEY(kind), JSON.stringify(obj || {}));
+  function refreshEmptyHints(){
+    qs("#emptyMain").style.display   = tbodyMain.children.length   ? "none" : "block";
+    qs("#emptyKanban").style.display = tbodyKanban.children.length ? "none" : "block";
   }
-  function clear(kind){
-    localStorage.removeItem(KEY(kind));
+  const formatStamp = (ts) => {
+    if (!ts) return "";
+    const d = ts instanceof Timestamp ? ts.toDate() : new Date(ts);
+    return `Copiado el ${d.toLocaleDateString('es-MX')} a las ${d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+  };
+
+  // ===== 311 COMPARTIDA: sumamos users/*/(cart|kanbanCart) de la línea =====
+  // Observamos la lista de usuarios y, para cada uno, escuchamos sus subcolecciones.
+  const usersCol = collection(db, "KB", kb, "lines", line, "users");
+
+  // Por-usuario: mapas con sus totales -> luego fusionamos
+  const perUserMain   = new Map(); // id -> Map<number, qty>
+  const perUserKanban = new Map(); // id -> Map<number, qty>
+  const perUserUnsubs = new Map(); // id -> {cart:unsub, kanban:unsub}
+
+  function recomputeAndPaint(){
+    const aggMain = new Map();
+    for (const m of perUserMain.values()){
+      for (const [num, qty] of m.entries()){
+        aggMain.set(num, (aggMain.get(num)||0) + qty);
+      }
+    }
+    const aggKanban = new Map();
+    for (const m of perUserKanban.values()){
+      for (const [num, qty] of m.entries()){
+        aggKanban.set(num, (aggKanban.get(num)||0) + qty);
+      }
+    }
+    paint(tbodyMain,   Array.from(aggMain,   ([number, qty])=>({number, qty})));
+    paint(tbodyKanban, Array.from(aggKanban, ([number, qty])=>({number, qty})));
+    refreshEmptyHints();
   }
 
-  // ---------- Render ----------
-  const tbodyMain   = document.querySelector("#tblMain tbody");
-  const tbodyKanban = document.querySelector("#tblKanban tbody");
+  function listenUserSub(userId){
+    // Evitar duplicados
+    if (perUserUnsubs.has(userId)) return;
 
-  function paint(tbody, data){
-    // data: { number: qty }
-    const rows = Object.entries(data)
-      .sort(([a],[b]) => String(a).localeCompare(String(b)))
-      .map(([num,qty]) => `<tr><td>${num}</td><td class="qty">${Number(qty||0).toLocaleString("es-MX")}</td></tr>`)
-      .join("");
-    tbody.innerHTML = rows || "";
+    const unsubs = {};
+
+    // cart
+    unsubs.cart = onSnapshot(query(collection(db, "KB", kb, "lines", line, "users", userId, "cart"), orderBy("number","asc")),
+      snap=>{
+        const m = new Map();
+        snap.docs.forEach(d=>{
+          const data=d.data()||{};
+          const num = data.number || d.id;
+          const qty = Number(data.qty||0);
+          if (qty>0) m.set(num, qty);
+        });
+        perUserMain.set(userId, m);
+        recomputeAndPaint();
+      });
+
+    // kanbanCart
+    unsubs.kanban = onSnapshot(query(collection(db, "KB", kb, "lines", line, "users", userId, "kanbanCart"), orderBy("number","asc")),
+      snap=>{
+        const m = new Map();
+        snap.docs.forEach(d=>{
+          const data=d.data()||{};
+          const num = data.number || d.id;
+          const qty = Number(data.qty||0);
+          if (qty>0) m.set(num, qty);
+        });
+        perUserKanban.set(userId, m);
+        recomputeAndPaint();
+      });
+
+    perUserUnsubs.set(userId, unsubs);
   }
 
-  function refresh(){
-    const main = load("main");
-    const kanb = load("kanban");
-    paint(tbodyMain,   main);
-    paint(tbodyKanban, kanb);
-    document.getElementById("emptyMain").style.display   = Object.keys(main).length ? "none" : "block";
-    document.getElementById("emptyKanban").style.display = Object.keys(kanb).length ? "none" : "block";
+  function unlistenUserSub(userId){
+    const u = perUserUnsubs.get(userId);
+    if (u){ try{u.cart&&u.cart()}catch{}; try{u.kanban&&u.kanban()}catch{}; }
+    perUserUnsubs.delete(userId);
+    perUserMain.delete(userId);
+    perUserKanban.delete(userId);
+    recomputeAndPaint();
   }
 
-  // ---------- Copiar / Borrar ----------
+  // Escucha alta/baja de usuarios (documentos bajo users/)
+  onSnapshot(usersCol, snap=>{
+    snap.docChanges().forEach(ch=>{
+      const id = ch.doc.id;
+      if (ch.type === "added" || ch.type === "modified") listenUserSub(id);
+      if (ch.type === "removed") unlistenUserSub(id);
+    });
+    // Por si ya había usuarios antes de primera tanda de changes
+    snap.docs.forEach(d=> listenUserSub(d.id));
+  });
+
+  // ===== Timestamps “Copiado el …” visibles para todos =====
+  const metaRef = doc(db, "KB", kb, "lines", line, "shared311_meta", "state");
+  onSnapshot(metaRef, snap=>{
+    const data = snap.data()||{};
+    qs("#copiedMain").textContent   = data.mainCopiedAt   ? formatStamp(data.mainCopiedAt)   : "";
+    qs("#copiedKanban").textContent = data.kanbanCopiedAt ? formatStamp(data.kanbanCopiedAt) : "";
+  });
+
+  // -------- Copiar / Borrar --------
   function toTSV(tbody){
     return Array.from(tbody.querySelectorAll("tr"))
       .map(tr => `${tr.children[0].textContent}\t${tr.children[1].textContent}`)
       .join("\n");
   }
-  function copy(text){ navigator.clipboard.writeText(text); alert("Copiado."); }
+  function copyText(text){
+    if (!text.trim()) { alert("No hay datos para copiar."); return false; }
+    navigator.clipboard.writeText(text);
+    return true;
+  }
 
-  document.getElementById("copyMain").onclick   = ()=> copy(toTSV(tbodyMain));
-  document.getElementById("copyKanban").onclick = ()=> copy(toTSV(tbodyKanban));
+  qs("#copyMain").onclick   = async ()=>{
+    if (copyText(toTSV(tbodyMain))){
+      await setDoc(metaRef, { mainCopiedAt: serverTimestamp() }, { merge:true });
+      // Texto se actualizará vía onSnapshot(metaRef)
+    }
+  };
+  qs("#copyKanban").onclick = async ()=>{
+    if (copyText(toTSV(tbodyKanban))){
+      await setDoc(metaRef, { kanbanCopiedAt: serverTimestamp() }, { merge:true });
+    }
+  };
 
-  document.getElementById("clearMain").onclick   = ()=>{ clear("main"); refresh(); };
-  document.getElementById("clearKanban").onclick = ()=>{ clear("kanban"); refresh(); };
-
-  // ---------- Inicio ----------
-  refresh();
+  // Borrar TODO (toda la línea)
+  async function clearCollectionUnderUsers(subName){
+    const usersSnap = await getDocs(usersCol);
+    const ops = [];
+    for (const uDoc of usersSnap.docs){
+      const colRef = collection(db, "KB", kb, "lines", line, "users", uDoc.id, subName);
+      const snap = await getDocs(colRef);
+      snap.docs.forEach(d => ops.push(deleteDoc(d.ref)));
+    }
+    if (ops.length) await Promise.all(ops);
+  }
+  qs("#clearMain").onclick   = async ()=>{ await clearCollectionUnderUsers("cart");        };
+  qs("#clearKanban").onclick = async ()=>{ await clearCollectionUnderUsers("kanbanCart");  };
 </script>
 </body>
 </html>

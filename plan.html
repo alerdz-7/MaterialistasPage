@@ -5,12 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Plan de hoy</title>
 
-  <!-- Estilos globales existentes -->
   <link rel="stylesheet" href="style.css"/>
   <link rel="stylesheet" href="style-modelos.css"/>
 
   <style>
-    /* Ajustes suaves para esta pantalla sin cambiar tu diseño */
     .wrap {max-width: 1200px; margin: 0 auto; padding: 0 12px;}
     .plan-toolbar {display:flex; gap:12px; align-items:center; justify-content:flex-end; margin:10px 0 18px;}
     .plan-list {display:flex; flex-direction:column; gap:14px;}
@@ -19,11 +17,9 @@
     .pill {background:#0d8e8a; border-radius:10px; padding:10px 14px; color:#fff; font-weight:700; text-align:center;}
     .qty-in {width:110px; text-align:center; padding:8px 10px; border-radius:10px; border:none; font-weight:700; letter-spacing:.5px}
     .changes {border:2px dashed rgba(255,255,255,.18); border-radius:10px; padding:10px 14px; min-height:44px; color:#bde7e5}
-    /* === NUEVO: lista ordenada para “materiales que cambian” === */
     .changes ul{ margin:0; padding-left:18px; }
     .changes li{ margin:2px 0; }
     .changes .muted{ opacity:.7; font-size:.95em; }
-
     .trash {width:42px; height:42px; border-radius:10px; background:#2a0e0e; color:#ff6666; border:2px solid #401717; font-weight:900; display:flex; align-items:center; justify-content:center}
     .drag {cursor:grab; font-size:18px; opacity:.8; padding-left:8px}
     .drag:active {cursor:grabbing;}
@@ -65,7 +61,6 @@
 
   <section id="planList" class="plan-list" aria-live="polite"></section>
 
-  <!-- MATERIALES AGREGADOS -->
   <section id="materialsBox" class="table-card" style="display:none;">
     <div class="tbl">
       <h3>MATERIALES PARA EL PLAN DE HOY</h3>
@@ -116,289 +111,212 @@
   </section>
 </main>
 
-<!-- Firebase -->
 <script type="module" src="firebase-config.js"></script>
 <script type="module">
   import { db } from "./firebase-config.js";
   import {
-    doc, getDoc, setDoc, increment
+    doc, onSnapshot, setDoc, collection, onSnapshot as colSnapshot,
+    orderBy, query, increment, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-  // -------------- Utils --------------
-  const qs = sel => document.querySelector(sel);
-  const qsa = sel => Array.from(document.querySelectorAll(sel));
+  const qs  = s => document.querySelector(s);
+  const qsa = s => Array.from(document.querySelectorAll(s));
   const fmt = n => (n||0).toLocaleString('es-MX');
-  const todayKey = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  };
+  const todayKey = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
   const prettyDate = () => new Date().toLocaleDateString('es-MX', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+  const getParams = () => { const p = new URLSearchParams(location.search); return { kb: p.get('kb')||'HA', line: p.get('line')||'L17' }; };
 
-  const getParams = () => {
-    const p = new URLSearchParams(location.search);
-    return { kb: p.get('kb')||'HA', line: p.get('line')||'L17' };
-  };
-
-  // ---- sesión por dispositivo (igual que 311.html) ----
   const SID_KEY = "materialistas.sessionId";
   let sessionId = localStorage.getItem(SID_KEY);
   if (!sessionId){ sessionId = Math.random().toString(36).slice(2); localStorage.setItem(SID_KEY, sessionId); }
 
-  // PLAN local backup
-  const loadPlanLocal = (kb,line,date) => {
-    try { return JSON.parse(localStorage.getItem(`MPPLAN:${kb}:${line}:${date}`) || '[]'); } catch { return []; }
-  };
-  const savePlanLocal = (kb,line,date,arr) => localStorage.setItem(`MPPLAN:${kb}:${line}:${date}`, JSON.stringify(arr));
+  const params    = getParams();
+  const dateKey   = todayKey();
+  const planDoc   = doc(db, 'KB', params.kb, 'lines', params.line, 'plans', dateKey);
 
-  // -------- Estado
-  const params = getParams();
-  const dateKey = todayKey();
   const pageTitle = qs('#pageTitle');
-  const dateSub = qs('#dateSub');
-  const planListEl = qs('#planList');
+  const dateSub   = qs('#dateSub');
+  const planListEl= qs('#planList');
   const materialsBox = qs('#materialsBox');
   const generalEl = qs('#generalMat');
   const kanbanEl  = qs('#kanbanMat');
 
-  let plan = []; // [{id,name,qty,materials:[{name,number,factor}], done:false}]
-
   pageTitle.textContent = `PLAN DE HOY`;
-  dateSub.textContent = `(${prettyDate()})`;
+  dateSub.textContent   = `(${prettyDate()})`;
 
-  // --------- Firestore helpers
-  async function readPlanFS(){
-    const ref = doc(db, 'KB', params.kb, 'lines', params.line, 'plans', dateKey);
-    try{
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return null;
-      const data = snap.data() || {};
-      return Array.isArray(data.items) ? data.items : null;
-    }catch(e){
-      return null;
-    }
+  const modelCache = new Map();
+
+  function killWatch(id){
+    const ref = modelCache.get(id);
+    if (ref?.unsubs) ref.unsubs.forEach(u=>{ try{u()}catch{} });
+    modelCache.delete(id);
   }
-  async function writePlanFS(items){
-    const ref = doc(db, 'KB', params.kb, 'lines', params.line, 'plans', dateKey);
-    const payload = { items };
-    try{
-      await setDoc(ref, payload, { merge:true });
-    }catch(e){
-      // respaldo local si falla
-    }
-  }
+  function watchModel(id){
+    if (modelCache.has(id)) return;
+    const unsubs = [];
+    const kbDocRef = ['KB', params.kb, 'lines', params.line, 'models', id];
 
-  // --------- Carga de plan
-  async function loadPlan(){
-    let items = await readPlanFS();
-    if (!items) items = loadPlanLocal(params.kb, params.line, dateKey);
+    const setMaterialsFromData = (data, pathArr)=>{
+      const embed = Array.isArray(data?.materials) ? data.materials : null;
+      if (embed && embed.length){
+        modelCache.set(id, { materials: embed.map(m=>({name:m.name||'', number:m.number||'', factor:Number(m.factor||0)})), unsubs });
+        repaintChanges();  renderIfVisible(); return;
+      }
+      const dref = doc(db, ...pathArr);
+      const cref = collection(dref, 'materials');
+      const u = colSnapshot(query(cref, orderBy('name','asc')), snap=>{
+        const mats = snap.docs.map(d=>{ const m=d.data()||{}; return {name:m.name||'', number:m.number||'', factor:Number(m.factor||0)}; });
+        modelCache.set(id, { materials: mats, unsubs });
+        repaintChanges();  renderIfVisible();
+      });
+      unsubs.push(u);
+    };
 
-    plan = (items || []).map(x => ({
-      id: x.id,
-      name: x.name || x.display || 'SIN NOMBRE',
-      qty: Number(x.qty || 0),
-      done: !!x.done,
-      materials: Array.isArray(x.materials) ? x.materials : []
+    unsubs.push(onSnapshot(doc(db, ...kbDocRef), snap=>{
+      if (snap.exists()) setMaterialsFromData(snap.data()||{}, kbDocRef);
+    }));
+    const legacy = ['lines', params.line, 'models', id];
+    unsubs.push(onSnapshot(doc(db, ...legacy), snap=>{
+      if (snap.exists()) setMaterialsFromData(snap.data()||{}, legacy);
     }));
 
-    // Si no hay materiales en items, intenta resolverlos al vuelo leyendo el modelo (opcional)
-    // -> aquí asumimos que tus items ya traen materials (como venías usando)
-
-    renderPlan();
-    await persistPlan(); // sincroniza a FS + local
+    modelCache.set(id, { materials: [], unsubs });
   }
 
-  // --------- Render del plan
-  function renderPlan(){
-    if (!plan.length){
-      planListEl.innerHTML = `<div class="table-card" style="text-align:center; opacity:.75">No hay modelos en el plan de hoy.</div>`;
-      return;
-    }
-
-    planListEl.innerHTML = plan.map((it,idx) => {
-      const chgHtml = changesHTML(idx);
-      return `
-      <div class="plan-row ${it.done ? 'done':''}" draggable="true" data-idx="${idx}">
-        <div class="center">
-          <input type="checkbox" class="chk-done" ${it.done?'checked':''} title="Hecho">
-        </div>
-        <div class="pill drag" title="Arrastrar para reordenar">⋮⋮ ${sanitize(it.name)}</div>
-        <div class="qty-slot">
-          <input class="qty-in" type="number" min="0" step="1" value="${it.qty}" aria-label="Cantidad">
-        </div>
-        <div class="chg-slot">
-          <div class="changes">${chgHtml}</div>
-        </div>
-        <div class="trash-slot">
-          <button class="trash" title="Eliminar">🗑</button>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Eventos por fila
-    qsa('.plan-row').forEach(row => {
-      const idx = Number(row.dataset.idx);
-      // done
-      row.querySelector('.chk-done')?.addEventListener('change', e=>{
-        plan[idx].done = e.target.checked;
-        row.classList.toggle('done', plan[idx].done);
-        persistPlan();
-      });
-      // qty (ACTUALIZA en tiempo real las tablas cuando están abiertas)
-      row.querySelector('.qty-in')?.addEventListener('input', e=>{
-        plan[idx].qty = Math.max(0, Number(e.target.value||0));
-        persistPlan();
-        if (materialsBox.style.display==='block') renderAggregated();
-      });
-      // borrar
-      row.querySelector('.trash')?.addEventListener('click', ()=>{
-        plan.splice(idx,1);
-        renderPlan();
-        persistPlan();
-        if (materialsBox.style.display==='block') renderAggregated();
-      });
-
-      // Drag & drop
-      row.addEventListener('dragstart', ev=>{
-        ev.dataTransfer.setData('text/plain', idx.toString());
-        row.style.opacity = .5;
-      });
-      row.addEventListener('dragend', ()=> row.style.opacity = '');
-      row.addEventListener('dragover', ev=> ev.preventDefault());
-      row.addEventListener('drop', ev=>{
-        ev.preventDefault();
-        const from = Number(ev.dataTransfer.getData('text/plain'));
-        const to = Number(row.dataset.idx);
-        if (isNaN(from) || isNaN(to) || from===to) return;
-        const [moved] = plan.splice(from,1);
-        plan.splice(to,0,moved);
-        renderPlan();
-        persistPlan();
-        if (materialsBox.style.display==='block') renderAggregated();
-      });
-    });
-  }
+  let plan = [];
+  onSnapshot(planDoc, snap=>{
+    const data  = snap.data() || {};
+    const items = Array.isArray(data.items) ? data.items : [];
+    const idsNow = new Set(items.map(x=>x.id));
+    for (const id of Array.from(modelCache.keys())) if (!idsNow.has(id)) killWatch(id);
+    items.forEach(it => watchModel(it.id));
+    plan = items.map(x => ({ id:x.id, name:x.name||x.display||'SIN NOMBRE', qty:Number(x.qty||0), done:!!x.done }));
+    renderPlan(); renderIfVisible();
+  });
 
   function sanitize(s=''){ return String(s).replace(/[<>&]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c])); }
-
-  // === NUEVO: HTML de “materiales que cambian” en formato lista ===
   function changesHTML(idx){
     if (idx===0) return 'Modelo de arranque';
-    const prev = plan[idx-1]?.materials || [];
-    const cur  = plan[idx]?.materials  || [];
-    const prevSet = new Set(prev.map(m => (m.number||'').trim()));
-    const changed = cur.filter(m => m.number && !prevSet.has(m.number.trim()));
-
+    const prevM = modelCache.get(plan[idx-1]?.id)?.materials || [];
+    const curM  = modelCache.get(plan[idx]?.id)?.materials  || [];
+    const prevSet = new Set(prevM.map(m => (m.number||'').trim()));
+    const changed = curM.filter(m => m.number && !prevSet.has(m.number.trim()));
     if (!changed.length) return 'No cambia nada';
     const items = changed.map(m => `<li>${sanitize(m.name)} <span class="muted">(${sanitize(m.number)})</span></li>`).join('');
     return `<ul>${items}</ul>`;
   }
 
-  // --------- MATERIAL AGGREGATION
-  function normalizeName(s=''){
-    // Lowercase, sin tildes, recorta espacios duplicados
-    return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  function renderPlan(){
+    if (!plan.length){
+      planListEl.innerHTML = `<div class="table-card" style="text-align:center; opacity:.75">No hay modelos en el plan de hoy.</div>`;
+      return;
+    }
+    planListEl.innerHTML = plan.map((it,idx) => `
+      <div class="plan-row ${it.done ? 'done':''}" data-idx="${idx}" draggable="true">
+        <div class="center"><input type="checkbox" class="chk-done" ${it.done?'checked':''} title="Hecho"></div>
+        <div class="pill drag" title="Arrastrar para reordenar">⋮⋮ ${sanitize(it.name)}</div>
+        <div class="qty-slot"><input class="qty-in" type="number" min="0" step="1" value="${it.qty}" aria-label="Cantidad"></div>
+        <div class="chg-slot"><div class="changes" data-chg="${idx}">${changesHTML(idx)}</div></div>
+        <div class="trash-slot"><button class="trash" title="Eliminar">🗑</button></div>
+      </div>
+    `).join('');
+    addRowEventHandlers();
   }
-  function isKanbanName(name=''){
-    const n = normalizeName(name);
-    return /\bbase\b/.test(n) || /\btapa\b/.test(n);
+  function repaintChanges(){ qsa('.changes').forEach(chg => { const idx = Number(chg.dataset.chg); chg.innerHTML = changesHTML(idx); }); }
+
+  function addRowEventHandlers(){
+    qsa('.plan-row').forEach(row=>{
+      const idx = Number(row.dataset.idx);
+      row.querySelector('.chk-done')?.addEventListener('change', e=>{
+        plan[idx].done = e.target.checked; row.classList.toggle('done', plan[idx].done); pushPlan();
+      });
+      row.querySelector('.qty-in')?.addEventListener('input', e=>{
+        plan[idx].qty = Math.max(0, Number(e.target.value||0));
+        if (materialsBox.style.display==='block') renderAggregated();
+        pushPlan();
+      });
+      row.querySelector('.trash')?.addEventListener('click', ()=>{
+        const copy = plan.slice(); copy.splice(idx,1); plan = copy; pushPlan();
+      });
+      row.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', idx.toString()); row.style.opacity=.5; });
+      row.addEventListener('dragend', ()=> row.style.opacity='');
+      row.addEventListener('dragover', ev=> ev.preventDefault());
+      row.addEventListener('drop', ev=>{
+        ev.preventDefault();
+        const from = Number(ev.dataTransfer.getData('text/plain'));
+        const to   = Number(row.dataset.idx);
+        if (isNaN(from)||isNaN(to)||from===to) return;
+        const copy = plan.slice(); const [moved] = copy.splice(from,1); copy.splice(to,0,moved); plan = copy; pushPlan();
+      });
+    });
   }
+
+  let pushTimer=null;
+  function pushPlan(){
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(async ()=>{
+      const items = plan.map(p => ({ id:p.id, name:p.name, qty:Number(p.qty||0), done:!!p.done }));
+      await setDoc(planDoc, { items }, { merge:true });
+    }, 120);
+  }
+
+  function normalizeName(s=''){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
+  function isKanbanName(name=''){ const n=normalizeName(name); return /\bbase\b/.test(n) || /\btapa\b/.test(n); }
 
   function aggregateMaterials(){
-    const agg = {};       // {number: {name, number, total}}
-    const aggKanban = {}; // solo base/tapa
+    const agg={}, aggK={};
     for (const it of plan){
-      const q = Number(it.qty||0);
-      if (!q) continue;
-      for (const m of (it.materials||[])){
-        const part = (m.number||'').trim();
-        const f = Number(m.factor||0);
-        const add = q * f;
+      const q = Number(it.qty||0); if (!q) continue;
+      const mats = modelCache.get(it.id)?.materials || [];
+      for (const m of mats){
+        const part=(m.number||'').trim(); const f=Number(m.factor||0); const add=q*f;
         if (!part || add<=0) continue;
-
-        const target = isKanbanName(m.name) ? aggKanban : agg;
-
-        if (!target[part]) target[part] = {name: m.name||'', number: part, total: 0};
+        const target = isKanbanName(m.name) ? aggK : agg;
+        if (!target[part]) target[part]={name:m.name||'', number:part, total:0};
         target[part].total += add;
       }
     }
-    return {
-      general: Object.values(agg).sort((a,b)=> a.name.localeCompare(b.name)),
-      kanban : Object.values(aggKanban).sort((a,b)=> a.name.localeCompare(b.name)),
-    };
+    return { general: Object.values(agg).sort((a,b)=> a.name.localeCompare(b.name)),
+             kanban : Object.values(aggK).sort((a,b)=> a.name.localeCompare(b.name)) };
   }
 
   function renderAggregated(){
     const {general, kanban} = aggregateMaterials();
-
     generalEl.innerHTML = general.length ? general.map(r=>`
-      <tr>
-        <td>${sanitize(r.name)}</td>
-        <td>${sanitize(r.number)}</td>
-        <td class="right">${fmt(r.total)}</td>
-        <td class="center"><input type="checkbox" class="chk-g"></td>
-      </tr>
+      <tr><td>${sanitize(r.name)}</td><td>${sanitize(r.number)}</td><td class="right">${fmt(r.total)}</td><td class="center"><input type="checkbox" class="chk-g"></td></tr>
     `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales (asigna cantidades a los modelos)</td></tr>`;
-
     kanbanEl.innerHTML = kanban.length ? kanban.map(r=>`
-      <tr>
-        <td>${sanitize(r.name)}</td>
-        <td>${sanitize(r.number)}</td>
-        <td class="right">${fmt(r.total)}</td>
-        <td class="center"><input type="checkbox" class="chk-k"></td>
-      </tr>
+      <tr><td>${sanitize(r.name)}</td><td>${sanitize(r.number)}</td><td class="right">${fmt(r.total)}</td><td class="center"><input type="checkbox" class="chk-k"></td></tr>
     `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales Kanban</td></tr>`;
   }
+  function renderIfVisible(){ if (materialsBox.style.display==='block') renderAggregated(); }
 
-  // --------- Persistencia (FS + Local)
-  async function persistPlan(){
-    const items = plan.map(p => ({
-      id: p.id, name: p.name, qty: Number(p.qty||0), done: !!p.done, materials: p.materials
-    }));
-    savePlanLocal(params.kb, params.line, dateKey, items);
-    await writePlanFS(items).catch(()=>{});
-  }
-
-  // --------- Eventos generales
   qs('#btnBack').onclick = () => history.length>1 ? history.back() : (location.href='index.html');
-
-  qs('#btnMaterials').onclick = ()=>{
-    // toggle
-    const open = !(materialsBox.style.display==='block');
-    materialsBox.style.display = open ? 'block' : 'none';
-    if (open) renderAggregated();
-  };
-
+  qs('#btnMaterials').onclick = ()=>{ const open = !(materialsBox.style.display==='block'); materialsBox.style.display = open?'block':'none'; if (open) renderAggregated(); };
   qs('#btnCheckAllGeneral').onclick = ()=> qsa('.chk-g').forEach(c=> c.checked = true);
   qs('#btnCheckAllKanban').onclick  = ()=> qsa('.chk-k').forEach(c=> c.checked = true);
 
-  // === CORREGIDO: enviar a 311 en Firestore por dispositivo (increment) ===
+  // 🔴 Crear/actualizar doc del usuario ANTES de escribir en cart/kanbanCart
+  async function ensureUserDoc(){
+    const ref = doc(db, "KB", params.kb, "lines", params.line, "users", sessionId);
+    await setDoc(ref, { active:true, updatedAt: serverTimestamp() }, { merge:true });
+  }
+
   async function addRowsTo(kind, selector){
-    const updates = [];
+    await ensureUserDoc(); // <<<<<<<<<< clave
+    const updates=[];
     qsa(selector).forEach(tr=>{
-      const chk = tr.querySelector('input[type="checkbox"]');
-      if (!chk?.checked) return;
+      const chk = tr.querySelector('input[type="checkbox"]'); if (!chk?.checked) return;
       const num = tr.children[1]?.textContent.trim();
-      const qtyText = tr.children[2]?.textContent || '0';
-      const qty = Number(qtyText.replace(/[^\d]/g,'')) || 0;
+      const qty = Number((tr.children[2]?.textContent||'0').replace(/[^\d]/g,'')) || 0;
       if (!num || qty<=0) return;
       const ref = doc(db, "KB", params.kb, "lines", params.line, "users", sessionId, kind, num);
-      updates.push(setDoc(ref, { number: num, qty: increment(qty) }, { merge: true }));
+      updates.push(setDoc(ref, { number:num, qty: increment(qty) }, { merge:true }));
     });
     if (updates.length) await Promise.all(updates);
   }
-
-  qs('#btnOKGeneral').onclick = async ()=>{
-    await addRowsTo("cart", "#generalMat tr");
-    alert('Material agregado a 311 (general).');
-  };
-
-  qs('#btnOKKanban').onclick = async ()=>{
-    await addRowsTo("kanbanCart", "#kanbanMat tr");
-    alert('Material agregado a 311 (Kanban).');
-  };
-
-  // --------- Init
-  loadPlan();
+  qs('#btnOKGeneral').onclick = async ()=>{ await addRowsTo("cart", "#generalMat tr");   alert('Material agregado a 311 (general).'); };
+  qs('#btnOKKanban').onclick  = async ()=>{ await addRowsTo("kanbanCart", "#kanbanMat tr"); alert('Material agregado a 311 (Kanban).'); };
 </script>
 </body>
 </html>
