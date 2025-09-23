@@ -1,155 +1,116 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>311 • Materialistas Page</title>
-  <!-- Conserva tu diseño -->
-  <link rel="stylesheet" href="../style.css">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>311</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style-modelos.css"/>
   <style>
-    .center{ max-width:1080px; margin:18px auto; }
-    .actions{ display:flex; gap:14px; justify-content:center; margin:18px 0 0; }
-    .sep{ height:24px; }
+    .wrap{ max-width:1100px; margin:0 auto; }
+    table{ width:100%; border-collapse:collapse; }
+    th,td{ padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.05); }
+    .qty{ text-align:right; width:160px }
+    .actions{ display:flex; gap:10px; }
   </style>
 </head>
 <body>
-  <!-- NAV -->
-  <header class="navbar">
-    <a class="logo" id="goHome" href="javascript:void(0)">
-      <img src="../img/logo.png" alt="Siemens">
-    </a>
-    <h1 class="title">MATERIALISTAS PAGE</h1>
-    <button id="btnBack" class="btn btn-compact">VOLVER</button>
-  </header>
+<header class="navbar">
+  <a class="logo" href="index.html"><img src="img/logo.png" alt="Logo"></a>
+  <h1 class="title">MATERIALISTAS PAGE</h1>
+  <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
+</header>
 
-  <main class="wrap">
-    <h2 class="detalle-titulo" id="hdr">MATERIAL POR PEDIR EN 311</h2>
+<main class="wrap">
+  <h2 class="detalle-titulo" id="titleH2">MATERIAL POR PEDIR EN 311</h2>
+  <div id="ctxHint" class="muted" style="text-align:center"></div>
 
-    <!-- Tabla lista principal -->
-    <div class="center">
-      <table class="tabla" id="tblR">
-        <thead>
-        <tr>
-          <th>NÚMERO DE PARTE</th>
-          <th>CANTIDAD</th>
-        </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-
+  <div class="mat-card">
+    <div class="mat-head">
+      <h3>Material</h3>
       <div class="actions">
-        <button id="copyR" class="btn btn-compact">COPIAR</button>
-        <button id="clearR" class="btn btn-compact btn-danger">BORRAR 311</button>
+        <button class="btn" id="copyMain">Copiar</button>
+        <button class="btn btn-danger" id="clearMain">Borrar</button>
       </div>
     </div>
+    <table id="tblMain"><thead><tr><th>NÚMERO DE PARTE</th><th class="qty">CANTIDAD</th></tr></thead><tbody></tbody></table>
+    <div id="emptyMain" class="muted" style="text-align:center; display:none">(Vacío)</div>
+  </div>
 
-    <!-- Separación visual -->
-    <div class="sep"></div>
-
-    <!-- Tabla KANBAN -->
-    <div class="center">
-      <h3 style="color:#fff;margin:0 0 10px 0;">KANBAN</h3>
-      <table class="tabla" id="tblK">
-        <thead>
-        <tr>
-          <th>NÚMERO DE PARTE</th>
-          <th>CANTIDAD</th>
-        </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-
+  <div class="mat-card">
+    <div class="mat-head">
+      <h3>Kanban</h3>
       <div class="actions">
-        <button id="copyK" class="btn btn-compact">COPIAR</button>
-        <button id="clearK" class="btn btn-compact btn-danger">BORRAR KANBAN</button>
+        <button class="btn" id="copyKanban">Copiar</button>
+        <button class="btn btn-danger" id="clearKanban">Borrar</button>
       </div>
     </div>
-  </main>
+    <table id="tblKanban"><thead><tr><th>NÚMERO DE PARTE</th><th class="qty">CANTIDAD</th></tr></thead><tbody></tbody></table>
+    <div id="emptyKanban" class="muted" style="text-align:center; display:none">(Vacío)</div>
+  </div>
+</main>
 
-  <script type="module">
-    const ROOT = '../';
-    const { db } = await import(ROOT + 'firebase-config.js');
-    import {
-      collection, getDocs, deleteDoc, doc
-    } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+<script type="module">
+  // ---------- Contexto (KB y línea por querystring) ----------
+  const p      = new URLSearchParams(location.search);
+  const kb     = p.get("kb")   || "HA";
+  const line   = p.get("line") || "L17";
 
-    // Usuario anónimo
-    const USER_ID_KEY = 'mp_user';
-    const userId = localStorage.getItem(USER_ID_KEY) || (()=>{ const id=crypto.randomUUID(); localStorage.setItem(USER_ID_KEY,id); return id; })();
+  document.getElementById("backBtn").onclick = () => location.href = `${kb}/lineas/${line.toLowerCase()}.html`;
+  document.getElementById("titleH2").textContent = `MATERIAL POR PEDIR EN 311 — ${kb} / ${line}`;
 
-    // Detectar KB y LINE
-    const segs = location.pathname.split('/').filter(Boolean);     // .../<KB>/311.html
-    const KB = segs[segs.length - 2] || 'HA';
-    const params = new URLSearchParams(location.search);
-    const LINE = (params.get('line') || 'L17').toUpperCase();
+  // ---------- Almacenamiento local por dispositivo ----------
+  const KEY = (kind)=> `MP311:${kb}:${line}:${kind}`; // kind: 'main' | 'kanban'
 
-    // UI
-    const hdr = document.getElementById('hdr');
-    hdr.textContent = `MATERIAL POR PEDIR EN 311 — ${KB} / ${LINE}`;
-    const goHome = document.getElementById('goHome');
-    const btnBack = document.getElementById('btnBack');
-    goHome.onclick = () => location.href = ROOT + 'index.html';
-    btnBack.onclick = () => history.length>1 ? history.back() : location.href = './index.html';
+  function load(kind){
+    try { return JSON.parse(localStorage.getItem(KEY(kind)) || "{}"); }
+    catch { return {}; }
+  }
+  function save(kind, obj){
+    localStorage.setItem(KEY(kind), JSON.stringify(obj || {}));
+  }
+  function clear(kind){
+    localStorage.removeItem(KEY(kind));
+  }
 
-    const tR = document.querySelector('#tblR tbody');
-    const tK = document.querySelector('#tblK tbody');
+  // ---------- Render ----------
+  const tbodyMain   = document.querySelector("#tblMain tbody");
+  const tbodyKanban = document.querySelector("#tblKanban tbody");
 
-    const copyR = document.getElementById('copyR');
-    const clearR = document.getElementById('clearR');
-    const copyK = document.getElementById('copyK');
-    const clearK = document.getElementById('clearK');
+  function paint(tbody, data){
+    // data: { number: qty }
+    const rows = Object.entries(data)
+      .sort(([a],[b]) => String(a).localeCompare(String(b)))
+      .map(([num,qty]) => `<tr><td>${num}</td><td class="qty">${Number(qty||0).toLocaleString("es-MX")}</td></tr>`)
+      .join("");
+    tbody.innerHTML = rows || "";
+  }
 
-    function inboxPath(type='regular'){
-      return ['materialistapage','lines',KB,LINE,'inbox',userId,type];
-    }
+  function refresh(){
+    const main = load("main");
+    const kanb = load("kanban");
+    paint(tbodyMain,   main);
+    paint(tbodyKanban, kanb);
+    document.getElementById("emptyMain").style.display   = Object.keys(main).length ? "none" : "block";
+    document.getElementById("emptyKanban").style.display = Object.keys(kanb).length ? "none" : "block";
+  }
 
-    async function loadTable(tbody, type='regular'){
-      tbody.innerHTML = '';
-      const qs = await getDocs(collection(db, ...inboxPath(type)));
-      const rows = [];
-      qs.forEach(d => rows.push(d.data()));
-      rows.sort((a,b)=>(a.number||'').localeCompare(b.number||''));
-      if (!rows.length){
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="2" style="color:var(--muted)">Sin materiales.</td>`;
-        tbody.appendChild(tr);
-        return;
-      }
-      for (const r of rows){
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${r.number||''}</td><td>${r.qty||0}</td>`;
-        tbody.appendChild(tr);
-      }
-    }
+  // ---------- Copiar / Borrar ----------
+  function toTSV(tbody){
+    return Array.from(tbody.querySelectorAll("tr"))
+      .map(tr => `${tr.children[0].textContent}\t${tr.children[1].textContent}`)
+      .join("\n");
+  }
+  function copy(text){ navigator.clipboard.writeText(text); alert("Copiado."); }
 
-    function copyTable(tbody){
-      const lines = [...tbody.querySelectorAll('tr')].map(tr=>{
-        const c = tr.children;
-        return (c.length>=2) ? `${c[0].textContent}\t${c[1].textContent}` : '';
-      }).filter(Boolean).join('\n');
-      if (!lines.trim()) { alert('No hay datos para copiar.'); return; }
-      navigator.clipboard.writeText(lines).then(()=> alert('Copiado al portapapeles.'));
-    }
+  document.getElementById("copyMain").onclick   = ()=> copy(toTSV(tbodyMain));
+  document.getElementById("copyKanban").onclick = ()=> copy(toTSV(tbodyKanban));
 
-    async function clearTable(type='regular'){
-      if (!confirm('¿Borrar esta lista de la 311?')) return;
-      const qs = await getDocs(collection(db, ...inboxPath(type)));
-      for (const d of qs.docs){
-        await deleteDoc(doc(db, ...inboxPath(type), d.id));
-      }
-      await loadAll();
-    }
+  document.getElementById("clearMain").onclick   = ()=>{ clear("main"); refresh(); };
+  document.getElementById("clearKanban").onclick = ()=>{ clear("kanban"); refresh(); };
 
-    async function loadAll(){
-      await Promise.all([ loadTable(tR,'regular'), loadTable(tK,'kanban') ]);
-    }
-
-    copyR.onclick = () => copyTable(tR);
-    copyK.onclick = () => copyTable(tK);
-    clearR.onclick = () => clearTable('regular');
-    clearK.onclick = () => clearTable('kanban');
-
-    loadAll();
-  </script>
+  // ---------- Inicio ----------
+  refresh();
+</script>
 </body>
 </html>

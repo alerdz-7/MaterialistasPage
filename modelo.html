@@ -60,33 +60,23 @@
 <script type="module" src="firebase-config.js"></script>
 <script type="module">
   import { db } from "./firebase-config.js";
-  import {
-    doc, getDoc, collection, getDocs, orderBy, query
-  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+  import { doc, getDoc, collection, getDocs, orderBy, query } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
   // --------- Utilidades ---------
   const qs  = s => document.querySelector(s);
   const qsa = s => Array.from(document.querySelectorAll(s));
-  function getParams(){
-    const p = new URLSearchParams(location.search);
-    return {
-      kb   : p.get('kb')   || 'HA',
-      line : p.get('line') || 'L17',
-      id   : p.get('id')   || ''
-    };
-  }
   const numberFormat = n => (n||0).toLocaleString('es-MX');
+  const params = (()=>{ const p=new URLSearchParams(location.search); return { kb:p.get('kb')||'HA', line:p.get('line')||'L17', id:p.get('id')||'' }; })();
 
-  // 311 local por usuario/línea
-  function load311Store(kb,line){
-    try { return JSON.parse(localStorage.getItem(`MP311:${kb}:${line}`) || '{}'); } catch { return {}; }
-  }
-  function save311Store(kb,line,data){
-    localStorage.setItem(`MP311:${kb}:${line}`, JSON.stringify(data));
-  }
+  // 311 local separada
+  const key311 = (kb,line,kind)=> `MP311:${kb}:${line}:${kind}`;
+  const load311 = (kb,line,kind)=> { try{ return JSON.parse(localStorage.getItem(key311(kb,line,kind))||'{}'); } catch{ return{} } };
+  const save311 = (kb,line,kind,obj)=> localStorage.setItem(key311(kb,line,kind), JSON.stringify(obj||{}));
+
+  function normalizeName(s=''){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
+  function isKanbanName(name=''){ const n = normalizeName(name); return /\bbase\b/.test(n) || /\btapa\b/.test(n); }
 
   // --------- Estado ---------
-  const params = getParams();
   const titleEl = qs('#modelTitle');
   const rowsEl  = qs('#rows');
   const qtyEl   = qs('#qtyInput');
@@ -98,12 +88,10 @@
   async function loadModel(){
     const refKB  = doc(db, 'KB', params.kb, 'lines', params.line, 'models', params.id);
     const snapKB = await getDoc(refKB);
-
-    if (snapKB.exists()){
-      modelDoc = snapKB;
-    } else {
-      const refLegacy   = doc(db, 'lines', params.line, 'models', params.id);
-      const snapLegacy  = await getDoc(refLegacy);
+    if (snapKB.exists()){ modelDoc = snapKB; }
+    else {
+      const refLegacy= doc(db, 'lines', params.line, 'models', params.id);
+      const snapLegacy= await getDoc(refLegacy);
       if (snapLegacy.exists()) modelDoc = snapLegacy;
     }
 
@@ -116,25 +104,18 @@
     const data = modelDoc.data() || {};
     titleEl.textContent = (data.name || data.display || 'MODELO').toUpperCase();
 
-    // 1) array embebido
     materials = Array.isArray(data.materials) ? data.materials.slice() : [];
-
-    // 2) subcolección "materials" como respaldo
     if (!materials.length){
+      // respaldo vía subcolección "materials"
       const refBasePath = modelDoc.ref.path.split('/');
       const col = collection(db, ...refBasePath, 'materials');
       const q  = query(col, orderBy('name','asc'));
       const snap = await getDocs(q);
       snap.forEach(d => {
         const m = d.data() || {};
-        materials.push({
-          name  : m.name   || '',
-          number: m.number || '',
-          factor: Number(m.factor || 0)
-        });
+        materials.push({ name:m.name||'', number:m.number||'', factor:Number(m.factor||0) });
       });
     }
-
     renderRows();
     updateQuantities();
   }
@@ -164,45 +145,44 @@
       const f     = Number(materials[idx]?.factor || 0);
       const total = baseQty * f;
       const cell  = tr.querySelector('.qty');
-      if (cell){
-        cell.dataset.raw = String(total);
-        cell.textContent = numberFormat(total);
-      }
+      if (cell){ cell.dataset.raw = String(total); cell.textContent = numberFormat(total); }
     });
   }
 
   // --------- Marcar todo ---------
   let allMarked = false;
-  function toggleAll(){
-    allMarked = !allMarked;
-    qsa('.chk-ask').forEach(chk => chk.checked = allMarked);
-  }
+  function toggleAll(){ allMarked = !allMarked; qsa('.chk-ask').forEach(chk => chk.checked = allMarked); }
 
-  // --------- OK => manda **SELECCIONADOS** a 311 local ---------
-  function sendTo311(){
+  // --------- OK => manda SELECCIONADOS a 311 (LOCAL por dispositivo) ---------
+  async function sendTo311(){
     const baseQty = Math.max(0, Number(qtyEl.value || 0));
-    if (!materials.length || baseQty <= 0){
-      alert('Ingresa una cantidad mayor a 0.');
-      return;
-    }
+    if (!materials.length || baseQty <= 0){ alert('Ingresa una cantidad mayor a 0.'); return; }
 
-    const store = load311Store(params.kb, params.line); // { partNumber: totalQty }
+    // acumula por número en main/kanban según nombre
+    let storeMain   = load311(params.kb, params.line, 'main');
+    let storeKanban = load311(params.kb, params.line, 'kanban');
 
     qsa('#rows tr').forEach(tr => {
       const idx  = Number(tr.dataset.idx || 0);
-      const ask  = tr.querySelector('.chk-ask')?.checked; // ahora SOLO seleccionados
+      const ask  = tr.querySelector('.chk-ask')?.checked;
       if (!ask) return;
 
+      const name = materials[idx]?.name || '';
       const part = (materials[idx]?.number || '').trim();
       const add  = Number(tr.querySelector('.qty')?.dataset.raw || 0);
-
       if (!part || add <= 0) return;
-      store[part] = (Number(store[part] || 0) + add);
+
+      const isKan = isKanbanName(name);
+      const bucket = isKan ? storeKanban : storeMain;
+      bucket[part] = Number(bucket[part]||0) + add;
+
+      if (isKan) storeKanban = bucket; else storeMain = bucket;
     });
 
-    save311Store(params.kb, params.line, store);
-    // volver a la lista de modelos de la línea
-    history.length > 1 ? history.back() : location.href = `HA/lineas/l17.html`;
+    save311(params.kb, params.line, 'main',   storeMain);
+    save311(params.kb, params.line, 'kanban', storeKanban);
+
+    alert('Material agregado a 311.');
   }
 
   // --------- Navegación ---------
