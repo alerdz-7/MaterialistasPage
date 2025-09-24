@@ -10,57 +10,79 @@
   <link rel="stylesheet" href="../../style-modelos.css"/>
 
   <style>
-    /* Barra de acciones */
-    .header-actions{ 
-      display:flex; gap:14px; justify-content:center; margin:10px auto 18px; 
+    /* Fuente “formal y normal” (stack de sistema) */
+    html, body, button, input, textarea {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
     }
 
-    /* Grid de tarjetas de modelo */
-    .grid{ 
-      max-width:1180px; margin:0 auto; 
-      display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); 
-      gap:28px; 
+    .wrap{ max-width:1200px; margin:0 auto; padding:0 12px; }
+    .header-actions{ display:flex; gap:14px; justify-content:center; margin:10px auto 18px; }
+
+    /* Contenedor de tarjetas de modelo */
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+      gap:26px;
+      max-width:1100px;
+      margin:0 auto;
     }
 
-    /* Cada fila de modelo: el botón grande + los iconitos */
-    .model-row{ 
-      position:relative;              /* para posicionar los iconos dentro */
-      display:flex; gap:8px; align-items:center;
+    /* Tarjeta: botón teal + zona de iconos */
+    .card{
+      display:flex; align-items:center; gap:12px;
     }
-    .model-name{ width:100%; flex:1; }
+    .model-btn{ flex:1; } /* tu estilo .grid-btn ya define el look */
 
-    /* ===== Iconos flotantes (sin recuadro negro) ===== */
-    .icon-btn, .add-btn{
-      position:absolute; right:10px; top:50%; transform:translateY(-50%);
-      display:none;                   /* se muestran solo en los modos */
-      border:none;
-      background:transparent;         /* sin fondo */
-      font-size:1.25rem;              /* tamaño del ícono */
-      line-height:1;
-      cursor:pointer;
-      padding:4px;
-      z-index:2;
-      user-select:none;
-      filter: drop-shadow(0 2px 8px rgba(0,0,0,.25));
+    /* Botones de icono (sin librerías) */
+    .icon-btn{
+      display:none;              /* por defecto ocultos */
+      width:44px; height:44px;
+      border:none; cursor:pointer;
+      border-radius:12px;
+      background:#0f2533;        /* oscuro para encajar con tu tema */
+      box-shadow:0 6px 18px rgba(0,0,0,.25);
+      padding:8px;
     }
-    .icon-btn.del{ color:#e04f4f; }   /* rojo eliminar */
-    .add-btn{ color:#1ee0a1; }        /* verde agregar */
+    .icon-btn svg{ width:100%; height:100%; }
 
-    /* Mostrar según modo activo */
-    .mode-delete .icon-btn{ display:inline-flex; }
-    .mode-plan   .add-btn{ display:inline-flex; }
+    /* Colores específicos */
+    .icon-add svg{ color:#25d6a2; }    /* verde-teal para añadir */
+    .icon-del{ background:#b94136; }   /* rojo para borrar */
+    .icon-del svg{ color:#ffffff; }
+
+    /* Mostrar iconos según modo */
+    .mode-plan .icon-add{ display:inline-flex; }
+    .mode-delete .icon-del{ display:inline-flex; }
+
+    /* Comentario (chat) */
+    .chat-fab{ position:fixed; left:26px; bottom:26px; z-index:900; }
+    .chat-btn{
+      width:56px; height:56px; border-radius:50%;
+      background:#0d8e8a; color:#fff; border:none;
+      display:flex; align-items:center; justify-content:center;
+      font-size:26px; line-height:1;
+      box-shadow:0 10px 26px rgba(0,0,0,.28); cursor:pointer;
+    }
+    .chat-badge{
+      position:absolute; width:12px; height:12px; background:#ff5a5a; border-radius:50%;
+      right:-2px; top:-2px; border:2px solid #07212f; display:none;
+    }
+
+    .modal{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:1000; }
+    .card-modal{ width:min(640px,92vw); background:#0f2533; border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+    .row-end{ display:flex; gap:10px; justify-content:flex-end; margin-top:10px; }
+    textarea.text{ width:100%; min-height:140px; border:none; outline:none; border-radius:10px; padding:12px; resize:vertical; }
   </style>
 </head>
 <body>
 <header class="navbar">
-  <a class="logo" href="../../index.html" title="Ir al inicio">
-    <img src="../../img/logo.png" alt="Logo">
-  </a>
+  <a class="logo" href="../../index.html"><img src="../../img/logo.png" alt="Logo"></a>
   <h1 class="title">MATERIALISTAS PAGE</h1>
   <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
 </header>
 
-<main>
+<main class="wrap">
   <h2 class="detalle-titulo" id="pageTitle" style="text-align:center">MODELOS · Línea 17</h2>
 
   <div class="header-actions">
@@ -69,161 +91,191 @@
     <button class="btn" id="btnSeePlan">VER PLAN</button>
   </div>
 
-  <section id="grid" class="grid" aria-live="polite"></section>
+  <section id="grid" class="grid"></section>
 </main>
 
-<!-- Botonera fija inferior derecha -->
-<div class="fab-col" style="position:fixed;right:24px;bottom:24px;display:flex;flex-direction:column;gap:12px;">
+<!-- Botones flotantes derecha -->
+<div style="position:fixed; right:24px; bottom:24px; display:flex; flex-direction:column; gap:12px;">
+  <button class="btn" id="btnRetorno">RETORNO</button>
   <button class="btn" id="btn311">311</button>
   <button class="btn" id="btnAdd">AGREGAR MODELO</button>
+</div>
+
+<!-- Botón de comentario -->
+<div class="chat-fab">
+  <button class="chat-btn" id="cmtBtn" title="Comentario">💬<span class="chat-badge" id="cmtBadge"></span></button>
+</div>
+
+<!-- Modal comentario -->
+<div class="modal" id="cmtModal" aria-hidden="true">
+  <div class="card-modal">
+    <h3 id="cmtTitle">Escribe un comentario</h3>
+    <textarea id="cmtText" class="text" placeholder=""></textarea>
+    <div class="row-end">
+      <button class="btn btn-danger" id="cmtDelete">Borrar</button>
+      <button class="btn" id="cmtSave">Guardar</button>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="../../firebase-config.js"></script>
 <script type="module">
   import { db } from "../../firebase-config.js";
-  import {
-    collection, doc, onSnapshot, query, orderBy,
-    deleteDoc, getDoc, setDoc
-  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+  import { collection, doc, onSnapshot, query, orderBy, deleteDoc, getDoc, setDoc, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-  /* ====== Contexto KB/Línea ====== */
-  const KB_ID   = "HA";
-  const LINE_ID = "L17";
+  const $ = s => document.querySelector(s);
+  const grid = $('#grid');
 
-  /* ====== Elementos ====== */
-  const grid          = document.getElementById("grid");
-  const btnBack       = document.getElementById("backBtn");
-  const btnDelete     = document.getElementById("btnDelete");
-  const btnPlanToggle = document.getElementById("btnPlanToggle");
-  const btnSeePlan    = document.getElementById("btnSeePlan");
-  const btn311        = document.getElementById("btn311");
-  const btnAdd        = document.getElementById("btnAdd");
-  const page          = document.body;
+  /* ===== Parámetros (para reusar el archivo en otras líneas) ===== */
+  const p = new URLSearchParams(location.search);
+  const KB_ID   = p.get('kb')   || 'HA';
+  const LINE_ID = p.get('line') || 'L17';
 
-  /* ====== Navegación ====== */
-  btnBack.onclick    = () => location.href = "../index.html"; // HA/lineas/index.html
-  btnSeePlan.onclick = () => location.href = `../../plan.html?kb=${KB_ID}&line=${LINE_ID}`;
-  btn311.onclick     = () => location.href = `../../311.html?kb=${KB_ID}&line=${LINE_ID}`;
-  btnAdd.onclick     = () => location.href = `../../nuevomodelo.html?kb=${KB_ID}&line=${LINE_ID}`;
+  /* ===== Título y navegación ===== */
+  $('#pageTitle').textContent = `MODELOS · ${LINE_ID.replace(/^L/, 'Línea ')}`;
+  $('#backBtn').onclick    = () => location.href = "../index.html";
+  $('#btnSeePlan').onclick = () => location.href = `../../plan.html?kb=${KB_ID}&line=${LINE_ID}`;
+  $('#btn311').onclick     = () => location.href = `../../311.html?kb=${KB_ID}&line=${LINE_ID}`;
+  $('#btnRetorno').onclick = () => location.href = `../../retorno.html?kb=${KB_ID}&line=${LINE_ID}`;
+  $('#btnAdd').onclick     = () => location.href = `../../nuevomodelo.html?kb=${KB_ID}&line=${LINE_ID}`;
 
-  /* ====== Modos ====== */
+  /* ===== Modos ===== */
   let deleteMode = false;
   let planMode   = false;
 
   function applyModes(){
-    page.classList.toggle("mode-delete", deleteMode);
-    page.classList.toggle("mode-plan",   planMode);
-
-    btnDelete.textContent   = deleteMode ? "CANCELAR ELIMINAR" : "ELIMINAR ALGÚN MODELO";
-    btnPlanToggle.textContent = planMode ? "LISTO EL PLAN DE HOY" : "PLAN DE HOY";
+    document.body.classList.toggle('mode-delete', deleteMode);
+    document.body.classList.toggle('mode-plan',   planMode);
+    $('#btnDelete').textContent     = deleteMode ? 'CANCELAR ELIMINAR' : 'ELIMINAR ALGÚN MODELO';
+    $('#btnPlanToggle').textContent = planMode   ? '✓ LISTO EL PLAN DE HOY' : 'PLAN DE HOY';
   }
-  btnDelete.onclick     = () => { deleteMode = !deleteMode; if (deleteMode) planMode=false; applyModes(); };
-  btnPlanToggle.onclick = () => { planMode   = !planMode;   if (planMode)   deleteMode=false; applyModes(); };
+  $('#btnDelete').onclick     = ()=>{ deleteMode = !deleteMode; if (deleteMode) planMode=false; applyModes(); };
+  $('#btnPlanToggle').onclick = ()=>{ planMode   = !planMode;   if (planMode)   deleteMode=false; applyModes(); };
 
-  /* ====== Render ====== */
-  function render(items){
-    grid.innerHTML = items.length
-      ? items.map(m => `
-        <div class="model-row">
-          <button class="grid-btn model-name" data-id="${m.id}" data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}">
-            ${m.name || m.display || "(Sin nombre)"}
-          </button>
-
-          <!-- Icono verde para agregar al plan (solo en modo plan) -->
-          <button class="add-btn" title="Agregar al plan" data-id="${m.id}" data-name="${(m.name||m.display||'').replace(/"/g,'&quot;')}">＋</button>
-
-          <!-- Icono rojo para eliminar (solo en modo eliminar) -->
-          <button class="icon-btn del" title="Eliminar" data-id="${m.id}">🗑️</button>
-        </div>`).join("")
-      : `<button class="grid-btn" disabled style="opacity:.7">(Sin modelos aún)</button>`;
+  /* ===== Render de modelos ===== */
+  function iconPlusSVG(){
+    return `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"></circle>
+        <line x1="12" y1="8" x2="12" y2="16"></line>
+        <line x1="8" y1="12" x2="16" y2="12"></line>
+      </svg>`;
+  }
+  function iconTrashSVG(){
+    return `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+      </svg>`;
   }
 
-  /* ====== Lectura de modelos (esquema nuevo + fallback legado) ====== */
+  function cardHTML(m){
+    const id = m.id, name = m.name || m.id;
+    return `
+      <div class="card">
+        <button class="grid-btn model-btn" data-id="${id}" data-name="${name}">${name}</button>
+        <button class="icon-btn icon-add" data-id="${id}" data-name="${name}" title="Agregar al plan">${iconPlusSVG()}</button>
+        <button class="icon-btn icon-del" data-id="${id}" data-name="${name}" title="Eliminar modelo">${iconTrashSVG()}</button>
+      </div>
+    `;
+  }
+
+  function render(models){
+    grid.innerHTML = models.map(cardHTML).join('');
+  }
+
+  /* ===== Suscripción a modelos (nuevo esquema y fallback legacy) ===== */
+  let drew = false;
   onSnapshot(
     query(collection(db, "KB", KB_ID, "lines", LINE_ID, "models"), orderBy("display","asc")),
-    snap => {
-      if (!snap.empty) {
-        const arr = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        render(arr);
-      } else {
-        grid.innerHTML = `<button class="grid-btn" disabled style="opacity:.7">(Sin modelos aún)</button>`;
-      }
-    }
+    snap => { if (!snap.empty){ render(snap.docs.map(d=>({id:d.id, ...d.data()}))); drew = true; } },
+    err => console.error('KB models error:', err)
   );
-  // Fallback legacy si no existiera el esquema nuevo
   onSnapshot(
     query(collection(db, "lines", LINE_ID, "models"), orderBy("display","asc")),
-    snap => {
-      if (grid.childElementCount === 0 && !snap.empty) {
-        const arr = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        render(arr);
-      }
-    }
+    snap => { if (!drew && !snap.empty){ render(snap.docs.map(d=>({id:d.id, ...d.data()}))); drew = true; } },
+    err => console.error('legacy models error:', err)
   );
 
-  /* ====== Util ====== */
-  const todayKey = () => {
+  /* ===== Util ===== */
+  const todayKey = ()=>{
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
 
-  /* ====== Clicks en la lista ====== */
-  grid.addEventListener("click", async (ev)=>{
-    const nameBtn = ev.target.closest(".model-name");
-    const delBtn  = ev.target.closest(".del");
-    const addBtn  = ev.target.closest(".add-btn");
+  /* ===== Interacciones ===== */
+  grid.addEventListener('click', async (ev)=>{
+    const openBtn = ev.target.closest('.model-btn');
+    const addBtn  = ev.target.closest('.icon-add');
+    const delBtn  = ev.target.closest('.icon-del');
 
-    // Abrir modelo (solo si no estamos en modos especiales)
-    if (nameBtn && !deleteMode && !planMode){
-      const id = nameBtn.dataset.id;
-      location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${id}`;
+    // Abrir modelo
+    if (openBtn){
+      const id = openBtn.dataset.id;
+      location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${encodeURIComponent(id)}`;
       return;
     }
 
-    // Eliminar un modelo (modo eliminar)
-    if (delBtn && deleteMode){
-      const id = delBtn.dataset.id;
-      const confirmName = delBtn.parentElement.querySelector(".model-name")?.dataset?.name || "modelo";
-      if (!confirm(`¿Eliminar “${confirmName}”? Esta acción no se puede deshacer.`)) return;
+    // Agregar al plan (visible en modo plan)
+    if (addBtn){
+      const modelId = addBtn.dataset.id;
+      const name    = addBtn.dataset.name;
+      const planRef = doc(db, "KB", KB_ID, "lines", LINE_ID, "plans", todayKey());
+      const snap    = await getDoc(planRef);
+      let items     = snap.exists() ? (snap.data().items || []) : [];
+      if (!items.some(it => it.id === modelId)) items.push({ id:modelId, name, qty:0 });
+      await setDoc(planRef, { items }, { merge:true });
+      alert(`“${name}” agregado al plan de hoy.`);
+      return;
+    }
 
-      // Borrar en esquema nuevo (si existe)
+    // Eliminar modelo (visible en modo eliminar)
+    if (delBtn){
+      const id   = delBtn.dataset.id;
+      const name = delBtn.dataset.name;
+      if (!confirm(`¿Eliminar “${name}”?`)) return;
       try { await deleteDoc(doc(db, "KB", KB_ID, "lines", LINE_ID, "models", id)); } catch {}
-      // Borrar en legacy (si existe)
       try { await deleteDoc(doc(db, "lines", LINE_ID, "models", id)); } catch {}
       return;
     }
-
-    // Agregar al plan del día (modo plan)
-    if (addBtn && planMode){
-      const modelId = addBtn.dataset.id;
-      const name    = addBtn.dataset.name;
-      const today   = todayKey();
-
-      // Documento del plan donde plan.html espera items[]
-      const planRef = doc(db, "KB", KB_ID, "lines", LINE_ID, "plans", today);
-
-      try {
-        const snap = await getDoc(planRef);
-        let items = [];
-        if (snap.exists()) {
-          const data = snap.data() || {};
-          items = Array.isArray(data.items) ? data.items : [];
-        }
-        // Agrega el modelo (qty se asigna después en plan.html)
-        items.push({ id: modelId, name, qty: 0, done: false });
-
-        await setDoc(planRef, { items }, { merge: true });
-
-        // Respaldo local para abrir plan.html de inmediato si falla la red
-        try { localStorage.setItem(`MPPLAN:${KB_ID}:${LINE_ID}:${today}`, JSON.stringify(items)); } catch {}
-        alert(`“${name}” agregado al plan de hoy.`);
-      } catch (e) {
-        console.error(e);
-        alert("No se pudo agregar al plan. Revisa tu conexión e inténtalo nuevamente.");
-      }
-      return;
-    }
   });
+
+  /* ===== Comentario simple ===== */
+  const cmtBtn   = $('#cmtBtn');
+  const cmtBadge = $('#cmtBadge');
+  const cmtModal = $('#cmtModal');
+  const cmtText  = $('#cmtText');
+  const cmtTitle = $('#cmtTitle');
+  cmtTitle.textContent = `Escribe un comentario para ${LINE_ID}`;
+
+  const cmtRef = doc(db, 'KB', KB_ID, 'lines', LINE_ID, 'comment', 'state');
+  onSnapshot(cmtRef, snap=>{
+    const d = snap.data()||{};
+    const text = d.text || '';
+    cmtBadge.style.display = text ? 'block' : 'none';
+    cmtText.value = text;
+  });
+
+  cmtBtn.onclick = ()=>{ cmtModal.style.display='flex'; cmtModal.setAttribute('aria-hidden','false'); };
+  function closeCmt(){ cmtModal.style.display='none'; cmtModal.setAttribute('aria-hidden','true'); }
+  $('#cmtSave').onclick = async ()=>{
+    await setDoc(cmtRef, { text: (cmtText.value||'').trim(), updatedAt: serverTimestamp() }, { merge:true });
+    closeCmt();
+  };
+  $('#cmtDelete').onclick = async ()=>{
+    await setDoc(cmtRef, { text:'', updatedAt: serverTimestamp() }, { merge:true });
+    closeCmt();
+  };
+  cmtModal.addEventListener('click', e=>{ if (e.target===cmtModal) closeCmt(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeCmt(); });
 </script>
+
+
 </body>
 </html>

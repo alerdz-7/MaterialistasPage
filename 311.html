@@ -9,16 +9,23 @@
   <style>
     .wrap{ max-width:1200px; margin:0 auto; padding:0 12px; }
     .section{ margin:26px auto 36px; max-width:720px; }
-    .section-head{
-      display:flex; align-items:center; justify-content:space-between; gap:12px; margin:8px 0 10px;
-    }
+    .section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:8px 0 10px; }
     .section-head h3{ margin:0; }
-    .actions{ display:flex; gap:10px; }
-    .tabla { margin:0 auto; }        /* centra la tabla */
+    .actions{ display:flex; gap:10px; align-items:center; }
+    .tabla { margin:0 auto; }
     .right{ text-align:right; }
     .muted{ opacity:.75; }
-    .tiny{ font-size:.9rem; opacity:.8; margin-top:6px; text-align:right; }
+    .tiny{ font-size:.9rem; opacity:.8; }
     .empty{ text-align:center; opacity:.7; padding:10px 0; }
+    .btn-ghost{ background:#213444; }
+    /* modal */
+    .modal{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:1000; }
+    .modal .card{ width:min(920px, 92vw); max-height:82vh; overflow:auto; background:#0f2533; border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35) }
+    .modal .head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px }
+    .modal .close{ background:#213444; color:#fff; border:none; border-radius:10px; padding:8px 10px; cursor:pointer }
+    .hist-item{ background:#132b3a; border-radius:12px; padding:12px; margin:10px 0 }
+    .hist-actions{ display:flex; gap:8px; justify-content:flex-end; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
   </style>
 </head>
 <body>
@@ -40,22 +47,20 @@
       <div class="actions">
         <button class="btn" id="copyMain">Copiar</button>
         <button class="btn btn-danger" id="clearMain">Borrar</button>
+        <button class="btn btn-compact btn-ghost" id="histMain">🕘 Historial</button>
       </div>
     </div>
 
     <div class="tabla">
       <table>
         <thead>
-          <tr>
-            <th>NÚMERO DE PARTE</th>
-            <th class="right">CANTIDAD</th>
-          </tr>
+          <tr><th>NÚMERO DE PARTE</th><th class="right">CANTIDAD</th></tr>
         </thead>
         <tbody id="tblMain"></tbody>
       </table>
     </div>
     <div id="emptyMain" class="empty">(Vacío)</div>
-    <div id="copiedMain" class="tiny muted"></div>
+    <div class="tiny muted" style="text-align:right" id="copiedMain"></div>
   </section>
 
   <!-- ===== KANBAN ===== -->
@@ -65,35 +70,43 @@
       <div class="actions">
         <button class="btn" id="copyKanban">Copiar</button>
         <button class="btn btn-danger" id="clearKanban">Borrar</button>
+        <button class="btn btn-compact btn-ghost" id="histKanban">🕘 Historial</button>
       </div>
     </div>
 
     <div class="tabla">
       <table>
         <thead>
-          <tr>
-            <th>NÚMERO DE PARTE</th>
-            <th class="right">CANTIDAD</th>
-          </tr>
+          <tr><th>NÚMERO DE PARTE</th><th class="right">CANTIDAD</th></tr>
         </thead>
         <tbody id="tblKanban"></tbody>
       </table>
     </div>
     <div id="emptyKanban" class="empty">(Vacío)</div>
-    <div id="copiedKanban" class="tiny muted"></div>
+    <div class="tiny muted" style="text-align:right" id="copiedKanban"></div>
   </section>
 </main>
+
+<!-- HISTORIAL MODAL -->
+<div class="modal" id="histModal" aria-hidden="true">
+  <div class="card">
+    <div class="head">
+      <h3 style="margin:0" id="histTitle">Historial</h3>
+      <button class="close" id="histClose">Cerrar</button>
+    </div>
+    <div id="histList"></div>
+  </div>
+</div>
 
 <!-- Firebase -->
 <script type="module" src="firebase-config.js"></script>
 <script type="module">
   import { db } from "./firebase-config.js";
   import {
-    collection, collectionGroup, onSnapshot, getDocs, deleteDoc, doc,
-    orderBy, query, setDoc, serverTimestamp, Timestamp
+    collection, collectionGroup, onSnapshot, getDocs, deleteDoc, doc, addDoc,
+    orderBy, query, setDoc, serverTimestamp, Timestamp, limit
   } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-  // -------- Utilidades --------
   const fmt = n => (Number(n||0)).toLocaleString("es-MX");
   const qs  = s => document.querySelector(s);
   const qsa = s => Array.from(document.querySelectorAll(s));
@@ -101,71 +114,49 @@
   const kb   = p.get("kb")   || "HA";
   const line = p.get("line") || "L17";
 
-  // UI base
   qs("#backBtn").onclick = () => history.length > 1 ? history.back() : (location.href = "index.html");
   qs("#titleH2").textContent = `MATERIAL POR PEDIR EN 311 — ${kb} / ${line}`;
 
   const tbodyMain   = qs("#tblMain");
   const tbodyKanban = qs("#tblKanban");
 
-  // Helpers de pintado
   function paint(tbody, list){
-    if (!list.length){
-      tbody.innerHTML = "";
-      return;
-    }
+    if (!list.length){ tbody.innerHTML=""; return; }
     list.sort((a,b)=> String(a.number).localeCompare(String(b.number)));
-    tbody.innerHTML = list.map(r => `
-      <tr>
-        <td>${r.number}</td>
-        <td class="right">${fmt(r.qty)}</td>
-      </tr>
+    tbody.innerHTML = list.map(r=> `
+      <tr><td>${r.number}</td><td class="right">${fmt(r.qty)}</td></tr>
     `).join("");
   }
   function refreshEmptyHints(){
     qs("#emptyMain").style.display   = tbodyMain.children.length   ? "none" : "block";
     qs("#emptyKanban").style.display = tbodyKanban.children.length ? "none" : "block";
   }
-  const formatStamp = (ts) => {
-    if (!ts) return "";
-    const d = ts instanceof Timestamp ? ts.toDate() : new Date(ts);
-    return `Copiado el ${d.toLocaleDateString('es-MX')} a las ${d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
-  };
 
-  // ===== 311 COMPARTIDA: sumamos users/*/(cart|kanbanCart) de la línea =====
-  // Observamos la lista de usuarios y, para cada uno, escuchamos sus subcolecciones.
+  // ===== 311 COMPARTIDA (suma todos los users/*/(cart|kanbanCart)) =====
   const usersCol = collection(db, "KB", kb, "lines", line, "users");
-
-  // Por-usuario: mapas con sus totales -> luego fusionamos
-  const perUserMain   = new Map(); // id -> Map<number, qty>
-  const perUserKanban = new Map(); // id -> Map<number, qty>
-  const perUserUnsubs = new Map(); // id -> {cart:unsub, kanban:unsub}
+  const perUserMain   = new Map();
+  const perUserKanban = new Map();
+  const perUserUnsubs = new Map();
 
   function recomputeAndPaint(){
     const aggMain = new Map();
-    for (const m of perUserMain.values()){
-      for (const [num, qty] of m.entries()){
+    for (const m of perUserMain.values())
+      for (const [num, qty] of m.entries())
         aggMain.set(num, (aggMain.get(num)||0) + qty);
-      }
-    }
+
     const aggKanban = new Map();
-    for (const m of perUserKanban.values()){
-      for (const [num, qty] of m.entries()){
+    for (const m of perUserKanban.values())
+      for (const [num, qty] of m.entries())
         aggKanban.set(num, (aggKanban.get(num)||0) + qty);
-      }
-    }
+
     paint(tbodyMain,   Array.from(aggMain,   ([number, qty])=>({number, qty})));
     paint(tbodyKanban, Array.from(aggKanban, ([number, qty])=>({number, qty})));
     refreshEmptyHints();
   }
 
   function listenUserSub(userId){
-    // Evitar duplicados
     if (perUserUnsubs.has(userId)) return;
-
     const unsubs = {};
-
-    // cart
     unsubs.cart = onSnapshot(query(collection(db, "KB", kb, "lines", line, "users", userId, "cart"), orderBy("number","asc")),
       snap=>{
         const m = new Map();
@@ -179,7 +170,6 @@
         recomputeAndPaint();
       });
 
-    // kanbanCart
     unsubs.kanban = onSnapshot(query(collection(db, "KB", kb, "lines", line, "users", userId, "kanbanCart"), orderBy("number","asc")),
       snap=>{
         const m = new Map();
@@ -195,7 +185,6 @@
 
     perUserUnsubs.set(userId, unsubs);
   }
-
   function unlistenUserSub(userId){
     const u = perUserUnsubs.get(userId);
     if (u){ try{u.cart&&u.cart()}catch{}; try{u.kanban&&u.kanban()}catch{}; }
@@ -204,27 +193,63 @@
     perUserKanban.delete(userId);
     recomputeAndPaint();
   }
-
-  // Escucha alta/baja de usuarios (documentos bajo users/)
   onSnapshot(usersCol, snap=>{
     snap.docChanges().forEach(ch=>{
       const id = ch.doc.id;
       if (ch.type === "added" || ch.type === "modified") listenUserSub(id);
       if (ch.type === "removed") unlistenUserSub(id);
     });
-    // Por si ya había usuarios antes de primera tanda de changes
     snap.docs.forEach(d=> listenUserSub(d.id));
   });
 
-  // ===== Timestamps “Copiado el …” visibles para todos =====
+  // ===== “Copiado el …” + Historial =====
   const metaRef = doc(db, "KB", kb, "lines", line, "shared311_meta", "state");
   onSnapshot(metaRef, snap=>{
     const data = snap.data()||{};
-    qs("#copiedMain").textContent   = data.mainCopiedAt   ? formatStamp(data.mainCopiedAt)   : "";
-    qs("#copiedKanban").textContent = data.kanbanCopiedAt ? formatStamp(data.kanbanCopiedAt) : "";
+    const toText = ts => ts ? `Copiado el ${ts.toDate().toLocaleDateString('es-MX')} a las ${ts.toDate().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', hour12:true })}` : '';
+    qs("#copiedMain").textContent   = toText(data.mainCopiedAt || null);
+    qs("#copiedKanban").textContent = toText(data.kanbanCopiedAt || null);
   });
 
-  // -------- Copiar / Borrar --------
+  // Historial helpers
+  const histCol = collection(db, "KB", kb, "lines", line, "shared311_history");
+  const histModal = qs("#histModal");
+  const histTitle = qs("#histTitle");
+  const histList  = qs("#histList");
+  qs("#histClose").onclick = ()=>{ histModal.style.display='none'; histModal.setAttribute('aria-hidden','true'); };
+  histModal.addEventListener('click', e=>{ if (e.target===histModal) qs("#histClose").click(); });
+
+  async function openHistory(type){
+    histTitle.textContent = type==='main' ? 'Historial de Material (últimas 5 copias)' : 'Historial de Kanban (últimas 5 copias)';
+    const qh = query(histCol, orderBy("copiedAt","desc"), limit(20)); // traer y filtrar por tipo
+    const snap = await getDocs(qh);
+    const list = snap.docs.map(d=>({ id:d.id, ...(d.data()||{}) })).filter(x=>x.type===type).slice(0,5);
+    if (!list.length){
+      histList.innerHTML = `<div class="muted">(Sin historial)</div>`;
+    } else {
+      histList.innerHTML = list.map(h=>{
+        const dt = h.copiedAt?.toDate?.() || null;
+        const when = dt ? `${dt.toLocaleDateString('es-MX')} ${dt.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit', hour12:true})}` : '';
+        const tsv = (Array.isArray(h.items)?h.items:[]).map(r=>`${r.number}\t${fmt(r.qty)}`).join('\n');
+        return `
+          <div class="hist-item">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;">
+              <div class="muted tiny">Copiado: ${when}</div>
+              <div class="hist-actions"><button class="btn btn-compact" data-copy="${encodeURIComponent(tsv)}">Copiar</button></div>
+            </div>
+            <pre class="mono" style="white-space:pre-wrap; margin:0">${tsv.replace(/</g,'&lt;')}</pre>
+          </div>
+        `;
+      }).join('');
+      histList.querySelectorAll('[data-copy]').forEach(b=>{
+        b.addEventListener('click', async ()=>{ await navigator.clipboard.writeText(decodeURIComponent(b.getAttribute('data-copy')||'')); });
+      });
+    }
+    histModal.style.display='flex'; histModal.setAttribute('aria-hidden','false');
+  }
+  qs("#histMain").onclick = ()=> openHistory('main');
+  qs("#histKanban").onclick = ()=> openHistory('kanban');
+
   function toTSV(tbody){
     return Array.from(tbody.querySelectorAll("tr"))
       .map(tr => `${tr.children[0].textContent}\t${tr.children[1].textContent}`)
@@ -236,19 +261,35 @@
     return true;
   }
 
+  async function prune(type){
+    // deja solo 5 por tipo
+    const snap = await getDocs(query(histCol, orderBy("copiedAt","desc")));
+    const perType = snap.docs.filter(d=>(d.data()?.type)===type);
+    const extra = perType.slice(5);
+    if (extra.length) await Promise.all(extra.map(d=> deleteDoc(d.ref)));
+  }
+
   qs("#copyMain").onclick   = async ()=>{
-    if (copyText(toTSV(tbodyMain))){
+    const text = toTSV(tbodyMain);
+    if (copyText(text)){
       await setDoc(metaRef, { mainCopiedAt: serverTimestamp() }, { merge:true });
-      // Texto se actualizará vía onSnapshot(metaRef)
+      // guarda historial
+      const items = Array.from(tbodyMain.querySelectorAll('tr')).map(tr=>({ number: tr.children[0].textContent, qty: Number((tr.children[1].textContent||'0').replace(/[^\d]/g,''))||0 }));
+      await addDoc(histCol, { type:'main', items, copiedAt: serverTimestamp() });
+      await prune('main');
     }
   };
   qs("#copyKanban").onclick = async ()=>{
-    if (copyText(toTSV(tbodyKanban))){
+    const text = toTSV(tbodyKanban);
+    if (copyText(text)){
       await setDoc(metaRef, { kanbanCopiedAt: serverTimestamp() }, { merge:true });
+      // guarda historial
+      const items = Array.from(tbodyKanban.querySelectorAll('tr')).map(tr=>({ number: tr.children[0].textContent, qty: Number((tr.children[1].textContent||'0').replace(/[^\d]/g,''))||0 }));
+      await addDoc(histCol, { type:'kanban', items, copiedAt: serverTimestamp() });
+      await prune('kanban');
     }
   };
 
-  // Borrar TODO (toda la línea)
   async function clearCollectionUnderUsers(subName){
     const usersSnap = await getDocs(usersCol);
     const ops = [];

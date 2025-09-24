@@ -61,6 +61,7 @@
 
   <section id="planList" class="plan-list" aria-live="polite"></section>
 
+  <!-- MATERIALES AGREGADOS -->
   <section id="materialsBox" class="table-card" style="display:none;">
     <div class="tbl">
       <h3>MATERIALES PARA EL PLAN DE HOY</h3>
@@ -119,17 +120,20 @@
     orderBy, query, increment, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
+  // -------- util --------
   const qs  = s => document.querySelector(s);
   const qsa = s => Array.from(document.querySelectorAll(s));
   const fmt = n => (n||0).toLocaleString('es-MX');
   const todayKey = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
   const prettyDate = () => new Date().toLocaleDateString('es-MX', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
   const getParams = () => { const p = new URLSearchParams(location.search); return { kb: p.get('kb')||'HA', line: p.get('line')||'L17' }; };
+  const sanitize = (s='') => String(s).replace(/[<>&]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]));
 
   const SID_KEY = "materialistas.sessionId";
   let sessionId = localStorage.getItem(SID_KEY);
   if (!sessionId){ sessionId = Math.random().toString(36).slice(2); localStorage.setItem(SID_KEY, sessionId); }
 
+  // -------- estado --------
   const params    = getParams();
   const dateKey   = todayKey();
   const planDoc   = doc(db, 'KB', params.kb, 'lines', params.line, 'plans', dateKey);
@@ -144,6 +148,7 @@
   pageTitle.textContent = `PLAN DE HOY`;
   dateSub.textContent   = `(${prettyDate()})`;
 
+  // cache de modelos -> materiales
   const modelCache = new Map();
 
   function killWatch(id){
@@ -160,14 +165,15 @@
       const embed = Array.isArray(data?.materials) ? data.materials : null;
       if (embed && embed.length){
         modelCache.set(id, { materials: embed.map(m=>({name:m.name||'', number:m.number||'', factor:Number(m.factor||0)})), unsubs });
-        repaintChanges();  renderIfVisible(); return;
+        if (!suspendRender) { repaintChanges(); renderIfVisible(); }
+        return;
       }
       const dref = doc(db, ...pathArr);
       const cref = collection(dref, 'materials');
       const u = colSnapshot(query(cref, orderBy('name','asc')), snap=>{
         const mats = snap.docs.map(d=>{ const m=d.data()||{}; return {name:m.name||'', number:m.number||'', factor:Number(m.factor||0)}; });
         modelCache.set(id, { materials: mats, unsubs });
-        repaintChanges();  renderIfVisible();
+        if (!suspendRender) { repaintChanges(); renderIfVisible(); }
       });
       unsubs.push(u);
     };
@@ -183,18 +189,31 @@
     modelCache.set(id, { materials: [], unsubs });
   }
 
-  let plan = [];
-  onSnapshot(planDoc, snap=>{
-    const data  = snap.data() || {};
-    const items = Array.isArray(data.items) ? data.items : [];
-    const idsNow = new Set(items.map(x=>x.id));
-    for (const id of Array.from(modelCache.keys())) if (!idsNow.has(id)) killWatch(id);
-    items.forEach(it => watchModel(it.id));
-    plan = items.map(x => ({ id:x.id, name:x.name||x.display||'SIN NOMBRE', qty:Number(x.qty||0), done:!!x.done }));
-    renderPlan(); renderIfVisible();
-  });
+  let plan = []; // [{id,name,qty,done}]
+  // 🔸 Cuando un input está activo, NO redibujamos la lista
+  let suspendRender = false;
 
-  function sanitize(s=''){ return String(s).replace(/[<>&]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c])); }
+  onSnapshot(
+    planDoc,
+    { includeMetadataChanges: true },
+    snap=>{
+      const data  = snap.data() || {};
+      const items = Array.isArray(data.items) ? data.items : [];
+
+      const idsNow = new Set(items.map(x=>x.id));
+      for (const id of Array.from(modelCache.keys())) if (!idsNow.has(id)) killWatch(id);
+      items.forEach(it => watchModel(it.id));
+
+      plan = items.map(x => ({ id:x.id, name:x.name||x.display||'SIN NOMBRE', qty:Number(x.qty||0), done:!!x.done }));
+
+      // Si estamos escribiendo en alguna cantidad, no toques el DOM.
+      if (!suspendRender && !snap.metadata.hasPendingWrites){
+        renderPlan();
+        renderIfVisible();
+      }
+    }
+  );
+
   function changesHTML(idx){
     if (idx===0) return 'Modelo de arranque';
     const prevM = modelCache.get(plan[idx-1]?.id)?.materials || [];
@@ -222,44 +241,87 @@
     `).join('');
     addRowEventHandlers();
   }
-  function repaintChanges(){ qsa('.changes').forEach(chg => { const idx = Number(chg.dataset.chg); chg.innerHTML = changesHTML(idx); }); }
+
+  // Sólo repintar la columna de cambios
+  function repaintChanges(){
+    qsa('.changes').forEach(chg => {
+      const idx = Number(chg.dataset.chg);
+      chg.innerHTML = changesHTML(idx);
+    });
+  }
 
   function addRowEventHandlers(){
     qsa('.plan-row').forEach(row=>{
       const idx = Number(row.dataset.idx);
+
+      // Hecho / no hecho
       row.querySelector('.chk-done')?.addEventListener('change', e=>{
-        plan[idx].done = e.target.checked; row.classList.toggle('done', plan[idx].done); pushPlan();
+        plan[idx].done = e.target.checked;
+        row.classList.toggle('done', plan[idx].done);
+        pushPlan(true);
       });
-      row.querySelector('.qty-in')?.addEventListener('input', e=>{
-        plan[idx].qty = Math.max(0, Number(e.target.value||0));
-        if (materialsBox.style.display==='block') renderAggregated();
-        pushPlan();
-      });
+
+      const qty = row.querySelector('.qty-in');
+      if (qty){
+        // mientras editas, suspendemos render
+        qty.addEventListener('focus', ()=>{ suspendRender = true; });
+        qty.addEventListener('blur',  ()=>{
+          suspendRender = false;
+          plan[idx].qty = Math.max(0, Number(qty.value||0));
+          renderIfVisible();   // actualizar totales si la caja está abierta
+          pushPlan(false, true); // guarda inmediato al salir
+        });
+        qty.addEventListener('input', e=>{
+          plan[idx].qty = Math.max(0, Number(e.target.value||0));
+          if (materialsBox.style.display==='block') renderAggregated();
+          pushPlan(); // debounce
+        });
+        // Enter = quitar foco (útil en móvil)
+        qty.addEventListener('keydown', ev=>{
+          if (ev.key === 'Enter') qty.blur();
+        });
+      }
+
+      // Eliminar
       row.querySelector('.trash')?.addEventListener('click', ()=>{
-        const copy = plan.slice(); copy.splice(idx,1); plan = copy; pushPlan();
+        const copy = plan.slice(); copy.splice(idx,1); plan = copy; pushPlan(true);
       });
-      row.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', idx.toString()); row.style.opacity=.5; });
-      row.addEventListener('dragend', ()=> row.style.opacity='');
+
+      // Drag & drop
+      row.addEventListener('dragstart', ev=>{
+        ev.dataTransfer.setData('text/plain', idx.toString());
+        row.style.opacity = .5;
+      });
+      row.addEventListener('dragend', ()=> row.style.opacity = '');
       row.addEventListener('dragover', ev=> ev.preventDefault());
       row.addEventListener('drop', ev=>{
         ev.preventDefault();
         const from = Number(ev.dataTransfer.getData('text/plain'));
         const to   = Number(row.dataset.idx);
-        if (isNaN(from)||isNaN(to)||from===to) return;
-        const copy = plan.slice(); const [moved] = copy.splice(from,1); copy.splice(to,0,moved); plan = copy; pushPlan();
+        if (isNaN(from) || isNaN(to) || from===to) return;
+        const copy = plan.slice();
+        const [moved] = copy.splice(from,1);
+        copy.splice(to,0,moved);
+        plan = copy;
+        pushPlan(true);
       });
     });
   }
 
+  // Empuja cambios del array completo
   let pushTimer=null;
-  function pushPlan(){
+  function pushPlan(coalesceOrder=false, flushNow=false){
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(async ()=>{
+    const write = async ()=>{
       const items = plan.map(p => ({ id:p.id, name:p.name, qty:Number(p.qty||0), done:!!p.done }));
       await setDoc(planDoc, { items }, { merge:true });
-    }, 120);
+    };
+    if (flushNow){ write(); return; }
+    // debounce más largo para que no “rebote” el DOM al teclear
+    pushTimer = setTimeout(write, 500);
   }
 
+  // ------- materiales totales -------
   function normalizeName(s=''){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
   function isKanbanName(name=''){ const n=normalizeName(name); return /\bbase\b/.test(n) || /\btapa\b/.test(n); }
 
@@ -276,34 +338,37 @@
         target[part].total += add;
       }
     }
-    return { general: Object.values(agg).sort((a,b)=> a.name.localeCompare(b.name)),
-             kanban : Object.values(aggK).sort((a,b)=> a.name.localeCompare(b.name)) };
+    return {
+      general: Object.values(agg).sort((a,b)=> a.name.localeCompare(b.name)),
+      kanban : Object.values(aggK).sort((a,b)=> a.name.localeCompare(b.name)),
+    };
   }
 
   function renderAggregated(){
     const {general, kanban} = aggregateMaterials();
-    generalEl.innerHTML = general.length ? general.map(r=>`
+    const G = general.length ? general.map(r=>`
       <tr><td>${sanitize(r.name)}</td><td>${sanitize(r.number)}</td><td class="right">${fmt(r.total)}</td><td class="center"><input type="checkbox" class="chk-g"></td></tr>
     `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales (asigna cantidades a los modelos)</td></tr>`;
-    kanbanEl.innerHTML = kanban.length ? kanban.map(r=>`
+    const K = kanban.length ? kanban.map(r=>`
       <tr><td>${sanitize(r.name)}</td><td>${sanitize(r.number)}</td><td class="right">${fmt(r.total)}</td><td class="center"><input type="checkbox" class="chk-k"></td></tr>
     `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales Kanban</td></tr>`;
+    generalEl.innerHTML = G; kanbanEl.innerHTML = K;
   }
   function renderIfVisible(){ if (materialsBox.style.display==='block') renderAggregated(); }
 
+  // -------- UI general --------
   qs('#btnBack').onclick = () => history.length>1 ? history.back() : (location.href='index.html');
   qs('#btnMaterials').onclick = ()=>{ const open = !(materialsBox.style.display==='block'); materialsBox.style.display = open?'block':'none'; if (open) renderAggregated(); };
   qs('#btnCheckAllGeneral').onclick = ()=> qsa('.chk-g').forEach(c=> c.checked = true);
   qs('#btnCheckAllKanban').onclick  = ()=> qsa('.chk-k').forEach(c=> c.checked = true);
 
-  // 🔴 Crear/actualizar doc del usuario ANTES de escribir en cart/kanbanCart
+  // Envío a 311 por dispositivo (misma sesión que 311.html)
   async function ensureUserDoc(){
     const ref = doc(db, "KB", params.kb, "lines", params.line, "users", sessionId);
     await setDoc(ref, { active:true, updatedAt: serverTimestamp() }, { merge:true });
   }
-
   async function addRowsTo(kind, selector){
-    await ensureUserDoc(); // <<<<<<<<<< clave
+    await ensureUserDoc();
     const updates=[];
     qsa(selector).forEach(tr=>{
       const chk = tr.querySelector('input[type="checkbox"]'); if (!chk?.checked) return;

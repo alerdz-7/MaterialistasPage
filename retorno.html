@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Retorno</title>
+
+  <!-- Estilos globales del proyecto -->
+  <link rel="stylesheet" href="./style.css"/>
+  <link rel="stylesheet" href="./style-modelos.css"/>
+
+  <style>
+    html,body,button,input,textarea{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","Liberation Sans",sans-serif;
+    }
+    .wrap{ max-width:1200px; margin:0 auto; padding:0 16px; }
+    .toolbar{ display:flex; gap:12px; justify-content:center; margin:14px 0 8px; }
+    .table-shell{ max-width:920px; margin:16px auto 0; }
+    .tabla{ width:100%; border-collapse:separate; border-spacing:0; }
+    .tabla thead th{
+      background:#223244; color:#25b7a7; font-weight:700; padding:16px;
+      border-top-left-radius:6px; border-top-right-radius:6px;
+      border-bottom:2px solid rgba(255,255,255,.06);
+      text-align:center;
+      letter-spacing:.02em;
+    }
+    .tabla thead th:nth-child(1){ width:65%; }
+    .tabla thead th:nth-child(2){ width:35%; }
+
+    .fila{ background:transparent; }
+    .celda{ padding:14px; }
+    .in{
+      width:100%; height:44px; border-radius:10px; border:none; outline:none;
+      padding:0 12px; background:#0b1d2a; color:#fff; box-shadow:inset 0 0 0 2px rgba(255,255,255,.06);
+      font-size:18px;
+    }
+    .in::placeholder{ color:rgba(255,255,255,.35); }
+    .copyFoot{
+      max-width:920px; margin:10px auto 0; display:flex; align-items:center; gap:14px; color:#25b7a7;
+    }
+
+    /* Botonera inferior: Agregar fila + Guardar */
+    .add-row-wrap{ display:flex; justify-content:center; gap:10px; margin:16px 0 0; }
+    .btn-round{ border-radius:999px; padding:12px 18px; }
+
+    /* Modal historial */
+    .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:1000; }
+    .card{ width:min(900px,94vw); max-height:86vh; overflow:auto; background:#0f2533; border-radius:14px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+    .card h3{ margin:0 0 10px; }
+    .hlist{ display:flex; flex-direction:column; gap:10px; }
+    .hitem{ background:#0b1d2a; border-radius:10px; padding:10px; }
+    .hhead{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
+    .small{ opacity:.85; font-size:.95rem; color:#9dd6cf; }
+    .x{ background:#213444; color:#fff; border:none; border-radius:10px; padding:8px 12px; cursor:pointer; }
+  </style>
+</head>
+<body>
+<header class="navbar">
+  <a class="logo" href="./index.html"><img src="./img/logo.png" alt="Logo"></a>
+  <h1 class="title">MATERIALISTAS PAGE</h1>
+  <button class="btn-agregar" id="backBtn" type="button">VOLVER</button>
+</header>
+
+<main class="wrap">
+  <h2 class="detalle-titulo" id="title" style="text-align:center">RETORNO — HA / L17</h2>
+
+  <!-- Arriba: Historial · Copiar · Borrar -->
+  <div class="toolbar">
+    <button class="btn" id="btnHist">Historial</button>
+    <button class="btn" id="btnCopy">Copiar</button>
+    <button class="btn btn-danger" id="btnClear">Borrar</button>
+  </div>
+
+  <div class="table-shell">
+    <table class="tabla">
+      <thead>
+        <tr>
+          <th>NÚMERO DE MATERIAL</th>
+          <th>CANTIDAD</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <!-- Abajo: Agregar fila + Guardar -->
+    <div class="add-row-wrap">
+      <button class="btn btn-round" id="btnAddRow">Agregar fila</button>
+      <button class="btn btn-round" id="btnSave">Guardar</button>
+    </div>
+
+    <div class="copyFoot">
+      <span id="copyInfo"></span>
+    </div>
+  </div>
+</main>
+
+<!-- Modal historial -->
+<div class="modal" id="histModal" aria-hidden="true">
+  <div class="card">
+    <div class="hhead">
+      <h3 style="margin:0">Historial de retornos (últimos 5)</h3>
+      <button class="x" id="histClose">Cerrar</button>
+    </div>
+    <div class="hlist" id="histList"></div>
+  </div>
+</div>
+
+<script type="module" src="./firebase-config.js"></script>
+<script type="module">
+  import { db } from "./firebase-config.js";
+  import {
+    collection, doc, getDoc, setDoc, onSnapshot, deleteDoc,
+    serverTimestamp, addDoc, query, orderBy, limit, Timestamp
+  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+  const $ = s => document.querySelector(s);
+
+  /* ====== Parámetros kb/line ====== */
+  const params = new URLSearchParams(location.search);
+  const KB = params.get('kb')   || 'HA';
+  const LINE = params.get('line') || 'L17';
+  $('#title').textContent = `RETORNO — ${KB} / ${LINE}`;
+
+  $('#backBtn').onclick = () => history.back();
+
+  /* ====== Refs Firestore ====== */
+  const basePath = ["KB", KB, "lines", LINE];
+  const currentRef   = doc(db, ...basePath, "retorno", "current");
+  const historyCol   = collection(db, ...basePath, "retorno_history");
+
+  /* ====== Estado / render ====== */
+  const tbody = $('#tbody');
+  let localRows = [];
+
+  function rowHTML(i, part, qty){
+    return `
+      <tr class="fila">
+        <td class="celda">
+          <input class="in part" data-i="${i}" value="${part ?? ''}" placeholder="A7B9150132"/>
+        </td>
+        <td class="celda">
+          <input class="in qty"  data-i="${i}" type="number" inputmode="numeric" value="${qty ?? 0}"/>
+        </td>
+      </tr>`;
+  }
+
+  function renderRows(rows){
+    if (!rows || rows.length===0){
+      rows = [{ part:"A7B9150132", qty:0 }];
+    }
+    localRows = rows.map(r=>({ part:r.part||"", qty: Number(r.qty)||0 }));
+    tbody.innerHTML = localRows.map((r,i)=>rowHTML(i, r.part, r.qty)).join('');
+  }
+
+  // Escucha en tiempo real del retorno actual
+  onSnapshot(currentRef, snap=>{
+    const data = snap.data() || {};
+    renderRows(data.rows || []);
+    // sello de tiempo "Copiado el ..."
+    if (data.copiedAt instanceof Timestamp){
+      const d = data.copiedAt.toDate();
+      $('#copyInfo').textContent = `Copiado el ${d.toLocaleDateString('es-MX')} a las ${d.toLocaleTimeString('es-MX', {hour:"2-digit", minute:"2-digit", hour12:true})}.`;
+    }else{
+      $('#copyInfo').textContent = "";
+    }
+  });
+
+  /* ====== Interacciones ====== */
+  // Mantener localRows actualizado al escribir
+  tbody.addEventListener('input', (e)=>{
+    const i = Number(e.target.dataset.i);
+    if (e.target.classList.contains('part')){
+      localRows[i].part = e.target.value;
+    } else if (e.target.classList.contains('qty')){
+      localRows[i].qty = Number(e.target.value||0);
+    }
+  });
+
+  // Agregar fila (debajo)
+  $('#btnAddRow').onclick = ()=>{
+    localRows.push({ part:"A7B9150132", qty:0 });
+    renderRows(localRows);
+  };
+
+  // Guardar (ahora abajo)
+  $('#btnSave').onclick = async ()=>{
+    await setDoc(currentRef, { rows: localRows, updatedAt: serverTimestamp() }, { merge:true });
+    await addDoc(historyCol, { rows: localRows, createdAt: serverTimestamp() });
+    alert('Retorno guardado.');
+  };
+
+  // Copiar (arriba)
+  $('#btnCopy').onclick = async ()=>{
+    const lines = localRows
+      .filter(r=> (r.part||"").trim()!=="" && Number(r.qty)>0 )
+      .map(r=> `${(r.part||"").trim()}\t${Number(r.qty)}`);
+    const txt = lines.join('\n') || '';
+    try{
+      await navigator.clipboard.writeText(txt);
+      await setDoc(currentRef, { copiedAt: serverTimestamp() }, { merge:true });
+      alert('Copiado al portapapeles.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo copiar.');
+    }
+  };
+
+  // Borrar actual (arriba)
+  $('#btnClear').onclick = async ()=>{
+    if (!confirm('¿Borrar el retorno actual?')) return;
+    await deleteDoc(currentRef);
+  };
+
+  // Historial (arriba)
+  const histModal = $('#histModal');
+  $('#btnHist').onclick = async ()=>{
+    const q = query(historyCol, orderBy('createdAt','desc'), limit(5));
+    const { getDocs } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
+    const snap = await getDocs(q);
+
+    const cont = $('#histList');
+    cont.innerHTML = '';
+
+    snap.forEach(docSnap=>{
+      const d = docSnap.data()||{};
+      const when = d.createdAt?.toDate?.();
+      const title = when ? `${when.toLocaleDateString('es-MX')} — ${when.toLocaleTimeString('es-MX',{hour:"2-digit",minute:"2-digit",hour12:true})}` : '(sin fecha)';
+      const rows = (d.rows||[]).filter(r=> (r.part||"").trim()!=="" && Number(r.qty)>0 );
+      const text = rows.map(r=>`${r.part}\t${r.qty}`).join('\n');
+
+      const item = document.createElement('div');
+      item.className = 'hitem';
+      item.innerHTML = `
+        <div class="hhead">
+          <div class="small">${title}</div>
+          <div style="display:flex; gap:8px">
+            <button class="x copyOne">Copiar</button>
+          </div>
+        </div>
+        <pre style="white-space:pre-wrap; margin:0; color:#bfe9e3">${text||'(Vacío)'}</pre>
+      `;
+      item.querySelector('.copyOne').onclick = async ()=>{
+        try{ await navigator.clipboard.writeText(text||''); alert('Copiado.'); }catch(e){ alert('No se pudo copiar'); }
+      };
+      cont.appendChild(item);
+    });
+
+    histModal.style.display='flex';
+    histModal.setAttribute('aria-hidden','false');
+  };
+  $('#histClose').onclick = ()=>{ histModal.style.display='none'; histModal.setAttribute('aria-hidden','true'); };
+  histModal.addEventListener('click', e=>{ if(e.target===histModal){ histModal.style.display='none'; histModal.setAttribute('aria-hidden','true'); } });
+</script>
+</body>
+</html>
