@@ -5,12 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Modelos · L17</title>
 
-  <!-- Ruta: HA/lineas/l17.html -->
   <link rel="stylesheet" href="../../style.css"/>
   <link rel="stylesheet" href="../../style-modelos.css"/>
 
   <style>
-    /* Fuente “formal y normal” (stack de sistema) */
+    /* Fuente de sistema */
     html, body, button, input, textarea {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                    "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
@@ -19,60 +18,87 @@
     .wrap{ max-width:1200px; margin:0 auto; padding:0 12px; }
     .header-actions{ display:flex; gap:14px; justify-content:center; margin:10px auto 18px; }
 
-    /* Contenedor de tarjetas de modelo */
+    /* Grilla de modelos (espacio para botones flotantes) */
     .grid{
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
-      gap:26px;
-      max-width:1100px;
+      grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      gap:16px;
+      max-width:1000px;
       margin:0 auto;
+      padding-bottom:110px; /* evita que los botones tapen los últimos modelos */
     }
 
-    /* Tarjeta: botón teal + zona de iconos */
-    .card{
-      display:flex; align-items:center; gap:12px;
-    }
-    .model-btn{ flex:1; } /* tu estilo .grid-btn ya define el look */
+    /* Tarjeta */
+    .card{ display:flex; align-items:center; gap:10px; }
+    .model-btn{ flex:1; } /* usa tu .grid-btn original */
 
-    /* Botones de icono (sin librerías) */
+    /* Botones de icono (SVG inline) */
     .icon-btn{
-      display:none;              /* por defecto ocultos */
-      width:44px; height:44px;
+      display:none;
+      width:42px; height:42px;
       border:none; cursor:pointer;
       border-radius:12px;
-      background:#0f2533;        /* oscuro para encajar con tu tema */
+      background:#0f2533;
       box-shadow:0 6px 18px rgba(0,0,0,.25);
       padding:8px;
     }
     .icon-btn svg{ width:100%; height:100%; }
-
-    /* Colores específicos */
-    .icon-add svg{ color:#25d6a2; }    /* verde-teal para añadir */
-    .icon-del{ background:#b94136; }   /* rojo para borrar */
+    .icon-add svg{ color:#25d6a2; }
+    .icon-del{ background:#b94136; }
     .icon-del svg{ color:#ffffff; }
 
     /* Mostrar iconos según modo */
     .mode-plan .icon-add{ display:inline-flex; }
     .mode-delete .icon-del{ display:inline-flex; }
 
-    /* Comentario (chat) */
-    .chat-fab{ position:fixed; left:26px; bottom:26px; z-index:900; }
+    /* Acciones flotantes con borde blanco (derecha-abajo) */
+    .actions-fab{
+      position:fixed; right:16px; bottom:16px;
+      display:flex; flex-direction:column; gap:10px; z-index:100;
+    }
+    .fab-btn{
+      background:#0d8e8a; color:#fff; border:none; cursor:pointer;
+      border-radius:12px; padding:10px 14px; font-weight:700; box-shadow:0 8px 20px rgba(0,0,0,.28);
+      border:2px solid rgba(255,255,255,.9);   /* contorno blanco */
+      min-width:120px; text-align:center;
+    }
+    .btn-ghost{ background:#213444; color:#fff; border:none; border-radius:10px; padding:8px 10px; cursor:pointer; }
+
+    /* Botón circular de comentario con borde blanco (izquierda-abajo) */
+    .chat-fab{
+      position:fixed; left:16px; bottom:16px; z-index:9999; /* MUY arriba */
+    }
     .chat-btn{
       width:56px; height:56px; border-radius:50%;
-      background:#0d8e8a; color:#fff; border:none;
+      background:#0d8e8a; color:#fff; border:2px solid rgba(255,255,255,.9);
       display:flex; align-items:center; justify-content:center;
-      font-size:26px; line-height:1;
-      box-shadow:0 10px 26px rgba(0,0,0,.28); cursor:pointer;
+      font-size:26px; line-height:1; box-shadow:0 10px 26px rgba(0,0,0,.28); cursor:pointer;
     }
     .chat-badge{
       position:absolute; width:12px; height:12px; background:#ff5a5a; border-radius:50%;
       right:-2px; top:-2px; border:2px solid #07212f; display:none;
     }
 
+    /* Modales */
     .modal{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:1000; }
-    .card-modal{ width:min(640px,92vw); background:#0f2533; border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+    .card-modal{ width:min(680px,92vw); background:#0f2533; border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
     .row-end{ display:flex; gap:10px; justify-content:flex-end; margin-top:10px; }
     textarea.text{ width:100%; min-height:140px; border:none; outline:none; border-radius:10px; padding:12px; resize:vertical; }
+
+    .soft-note{ color:#9dd6cf; font-size:.92rem; margin-top:8px; min-height:1.1em; }
+
+    /* Historial de comentarios (últimos 5) */
+    .hist-list{ display:flex; flex-direction:column; gap:10px; max-height:60vh; overflow:auto; }
+    .hist-item{ background:#0b1d2a; border-radius:10px; padding:10px; }
+    .hist-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px; }
+    .mini{ opacity:.85; font-size:.95rem; color:#9dd6cf; }
+
+    /* En móvil, los botones flotantes derechos pasan a fila centrada */
+    @media (max-width:720px){
+      .actions-fab{ left:50%; right:auto; transform:translateX(-50%); flex-direction:row; gap:8px; bottom:12px; }
+      .fab-btn{ min-width:auto; padding:10px 12px; }
+      .chat-fab{ left:12px; bottom:12px; }
+    }
   </style>
 </head>
 <body>
@@ -91,43 +117,60 @@
     <button class="btn" id="btnSeePlan">VER PLAN</button>
   </div>
 
-  <section id="grid" class="grid"></section>
+  <section id="grid" class="grid" aria-live="polite"></section>
 </main>
 
-<!-- Botones flotantes derecha -->
-<div style="position:fixed; right:24px; bottom:24px; display:flex; flex-direction:column; gap:12px;">
-  <button class="btn" id="btnRetorno">RETORNO</button>
-  <button class="btn" id="btn311">311</button>
-  <button class="btn" id="btnAdd">AGREGAR MODELO</button>
+<!-- Acciones flotantes (derecha) -->
+<div class="actions-fab" aria-label="Acciones rápidas">
+  <button class="fab-btn" id="btnRetorno">RETORNO</button>
+  <button class="fab-btn" id="btn311">311</button>
+  <button class="fab-btn" id="btnAdd">AGREGAR MODELO</button>
 </div>
 
-<!-- Botón de comentario -->
+<!-- Botón de comentario (izquierda) -->
 <div class="chat-fab">
-  <button class="chat-btn" id="cmtBtn" title="Comentario">💬<span class="chat-badge" id="cmtBadge"></span></button>
+  <div style="position:relative">
+    <button class="chat-btn" id="cmtBtn" title="Comentario">💬<span class="chat-badge" id="cmtBadge"></span></button>
+  </div>
 </div>
 
 <!-- Modal comentario -->
 <div class="modal" id="cmtModal" aria-hidden="true">
-  <div class="card-modal">
+  <div class="card-modal" id="cmtCard">
     <h3 id="cmtTitle">Escribe un comentario</h3>
     <textarea id="cmtText" class="text" placeholder=""></textarea>
+    <div class="soft-note" id="cmtNote"></div>
     <div class="row-end">
+      <button class="btn btn-ghost" id="cmtHist">Historial</button>
       <button class="btn btn-danger" id="cmtDelete">Borrar</button>
       <button class="btn" id="cmtSave">Guardar</button>
     </div>
   </div>
 </div>
 
+<!-- Modal historial de comentarios (últimos 5) -->
+<div class="modal" id="histModal" aria-hidden="true">
+  <div class="card-modal" id="histCard">
+    <div class="hist-head">
+      <h3 style="margin:0">Historial de comentarios (últimos 5)</h3>
+      <button class="btn btn-ghost" id="histClose">Cerrar</button>
+    </div>
+    <div class="hist-list" id="histList"></div>
+  </div>
+</div>
+
 <script type="module" src="../../firebase-config.js"></script>
 <script type="module">
   import { db } from "../../firebase-config.js";
-  import { collection, doc, onSnapshot, query, orderBy, deleteDoc, getDoc, setDoc, serverTimestamp }
-    from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+  import {
+    collection, doc, onSnapshot, query, orderBy, deleteDoc, getDoc, setDoc,
+    serverTimestamp, addDoc, limit, getDocs
+  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
   const $ = s => document.querySelector(s);
   const grid = $('#grid');
 
-  /* ===== Parámetros (para reusar el archivo en otras líneas) ===== */
+  /* ===== Parámetros ===== */
   const p = new URLSearchParams(location.search);
   const KB_ID   = p.get('kb')   || 'HA';
   const LINE_ID = p.get('line') || 'L17';
@@ -143,7 +186,6 @@
   /* ===== Modos ===== */
   let deleteMode = false;
   let planMode   = false;
-
   function applyModes(){
     document.body.classList.toggle('mode-delete', deleteMode);
     document.body.classList.toggle('mode-plan',   planMode);
@@ -153,7 +195,7 @@
   $('#btnDelete').onclick     = ()=>{ deleteMode = !deleteMode; if (deleteMode) planMode=false; applyModes(); };
   $('#btnPlanToggle').onclick = ()=>{ planMode   = !planMode;   if (planMode)   deleteMode=false; applyModes(); };
 
-  /* ===== Render de modelos ===== */
+  /* ===== Iconos SVG ===== */
   function iconPlusSVG(){
     return `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -175,8 +217,9 @@
       </svg>`;
   }
 
+  /* ===== Render modelos ===== */
   function cardHTML(m){
-    const id = m.id, name = m.name || m.id;
+    const id = m.id, name = m.name || m.display || m.id;
     return `
       <div class="card">
         <button class="grid-btn model-btn" data-id="${id}" data-name="${name}">${name}</button>
@@ -185,12 +228,9 @@
       </div>
     `;
   }
+  function render(models){ grid.innerHTML = models.map(cardHTML).join(''); }
 
-  function render(models){
-    grid.innerHTML = models.map(cardHTML).join('');
-  }
-
-  /* ===== Suscripción a modelos (nuevo esquema y fallback legacy) ===== */
+  /* ===== Suscripción a modelos (esquema nuevo y fallback legacy) ===== */
   let drew = false;
   onSnapshot(
     query(collection(db, "KB", KB_ID, "lines", LINE_ID, "models"), orderBy("display","asc")),
@@ -209,20 +249,17 @@
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
 
-  /* ===== Interacciones ===== */
+  /* ===== Interacciones en la grilla ===== */
   grid.addEventListener('click', async (ev)=>{
     const openBtn = ev.target.closest('.model-btn');
     const addBtn  = ev.target.closest('.icon-add');
     const delBtn  = ev.target.closest('.icon-del');
 
-    // Abrir modelo
     if (openBtn){
       const id = openBtn.dataset.id;
       location.href = `../../modelo.html?kb=${KB_ID}&line=${LINE_ID}&id=${encodeURIComponent(id)}`;
       return;
     }
-
-    // Agregar al plan (visible en modo plan)
     if (addBtn){
       const modelId = addBtn.dataset.id;
       const name    = addBtn.dataset.name;
@@ -234,8 +271,6 @@
       alert(`“${name}” agregado al plan de hoy.`);
       return;
     }
-
-    // Eliminar modelo (visible en modo eliminar)
     if (delBtn){
       const id   = delBtn.dataset.id;
       const name = delBtn.dataset.name;
@@ -246,36 +281,124 @@
     }
   });
 
-  /* ===== Comentario simple ===== */
+  /* ===== Comentario con historial (últimos 5) ===== */
   const cmtBtn   = $('#cmtBtn');
   const cmtBadge = $('#cmtBadge');
   const cmtModal = $('#cmtModal');
+  const cmtCard  = $('#cmtCard');
   const cmtText  = $('#cmtText');
   const cmtTitle = $('#cmtTitle');
-  cmtTitle.textContent = `Escribe un comentario para ${LINE_ID}`;
+  const cmtNote  = $('#cmtNote');
+  const histModal= $('#histModal');
+  const histCard = $('#histCard');
+  const histList = $('#histList');
 
-  const cmtRef = doc(db, 'KB', KB_ID, 'lines', LINE_ID, 'comment', 'state');
-  onSnapshot(cmtRef, snap=>{
-    const d = snap.data()||{};
-    const text = d.text || '';
-    cmtBadge.style.display = text ? 'block' : 'none';
-    cmtText.value = text;
+  cmtTitle.textContent = `Escribe un comentario para ${LINE_ID}`;
+  cmtText.placeholder  = `Escribe un comentario para ${LINE_ID}`;
+
+  const cmtRef  = doc(db, 'KB', KB_ID, 'lines', LINE_ID, 'comment', 'state');
+  const cmtHist = collection(db, 'KB', KB_ID, 'lines', LINE_ID, 'comment_history');
+
+  // Abrir modal comentarios (siempre abre, aún sin Firestore)
+  cmtBtn.onclick = ()=>{ 
+    cmtModal.style.display='flex'; 
+    cmtModal.setAttribute('aria-hidden','false');
+    cmtNote.textContent = ''; // limpia mensajes anteriores
+  };
+
+  // Cerrar modal comentarios tocando el fondo o con Escape (sin guardar)
+  cmtModal.addEventListener('click', (e)=>{
+    if (e.target === cmtModal) {
+      cmtModal.style.display='none';
+      cmtModal.setAttribute('aria-hidden','true');
+    }
+  });
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape' && cmtModal.style.display === 'flex') {
+      cmtModal.style.display='none';
+      cmtModal.setAttribute('aria-hidden','true');
+    }
   });
 
-  cmtBtn.onclick = ()=>{ cmtModal.style.display='flex'; cmtModal.setAttribute('aria-hidden','false'); };
-  function closeCmt(){ cmtModal.style.display='none'; cmtModal.setAttribute('aria-hidden','true'); }
-  $('#cmtSave').onclick = async ()=>{
-    await setDoc(cmtRef, { text: (cmtText.value||'').trim(), updatedAt: serverTimestamp() }, { merge:true });
+  // Snapshot seguro (si falla, mostramos mensaje pero el UI queda activo)
+  try{
+    onSnapshot(cmtRef, snap=>{
+      const d = snap.data()||{};
+      const text = d.text || '';
+      cmtBadge.style.display = text ? 'block' : 'none';
+      cmtText.value = text;
+    }, err=>{
+      console.error('Snapshot comentario:', err);
+      cmtNote.textContent = 'No se pudo conectar para leer el comentario (revisa tu conexión o permisos).';
+    });
+  }catch(err){
+    console.error('Init comentario:', err);
+    cmtNote.textContent = 'No se pudo inicializar el chat (revisa firebase-config.js).';
+  }
+
+  async function safeSet(docRef, data, opts){
+    try{ await setDoc(docRef, data, opts); }
+    catch(err){ console.error('Guardar comentario:', err); cmtNote.textContent = 'No se pudo guardar (revisa permisos).'; }
+  }
+  async function safeAdd(colRef, data){
+    try{ await addDoc(colRef, data); }
+    catch(err){ console.error('Historial comentario:', err); /* sin nota ruidosa */ }
+  }
+
+  function closeCmt(){ 
+    cmtModal.style.display='none'; 
+    cmtModal.setAttribute('aria-hidden','true'); 
+  }
+  document.getElementById('cmtSave').onclick = async ()=>{
+    const text = (cmtText.value||'').trim();
+    await safeSet(cmtRef, { text, updatedAt: serverTimestamp() }, { merge:true });
+    await safeAdd(cmtHist, { text, createdAt: serverTimestamp(), action:'save' });
     closeCmt();
   };
-  $('#cmtDelete').onclick = async ()=>{
-    await setDoc(cmtRef, { text:'', updatedAt: serverTimestamp() }, { merge:true });
+  document.getElementById('cmtDelete').onclick = async ()=>{
+    if (!confirm('¿Borrar el comentario?')) return;
+    await safeSet(cmtRef, { text:'', updatedAt: serverTimestamp() }, { merge:true });
+    await safeAdd(cmtHist, { text:'', createdAt: serverTimestamp(), action:'delete' });
     closeCmt();
   };
-  cmtModal.addEventListener('click', e=>{ if (e.target===cmtModal) closeCmt(); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeCmt(); });
+
+  // Abrir historial (últimos 5) — también robusto a errores
+  document.getElementById('cmtHist').onclick = async ()=>{
+    histList.innerHTML = '<div class="mini">Cargando…</div>';
+    histModal.style.display='flex';
+    histModal.setAttribute('aria-hidden','false');
+    try{
+      const q = query(cmtHist, orderBy('createdAt','desc'), limit(5));
+      const snap = await getDocs(q);
+      histList.innerHTML = '';
+      if (snap.empty){
+        histList.innerHTML = '<div class="mini" style="opacity:.8">(Sin historial)</div>';
+      }else{
+        snap.forEach(s=>{
+          const d  = s.data()||{};
+          const ts = d.createdAt?.toDate?.();
+          const when = ts ? `${ts.toLocaleDateString('es-MX')} — ${ts.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',hour12:true})}` : '(sin fecha)';
+          const text = (d.text||'').trim() || (d.action==='delete' ? '(borrado)' : '(vacío)');
+          const item = document.createElement('div');
+          item.className = 'hist-item';
+          item.innerHTML = `
+            <div class="hist-head"><div class="mini">${when}</div></div>
+            <div style="white-space:pre-wrap; color:#bfe9e3">${text}</div>
+          `;
+          histList.appendChild(item);
+        });
+      }
+    }catch(err){
+      console.error('Abrir historial:', err);
+      histList.innerHTML = '<div class="mini" style="opacity:.8">No se pudo cargar el historial.</div>';
+    }
+  };
+  document.getElementById('histClose').onclick = ()=>{
+    histModal.style.display='none';
+    histModal.setAttribute('aria-hidden','true');
+  };
+  histModal.addEventListener('click', e=>{ if(e.target===histModal){ histModal.style.display='none'; histModal.setAttribute('aria-hidden','true'); } });
+
 </script>
-
-
 </body>
 </html>
