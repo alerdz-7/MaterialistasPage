@@ -65,7 +65,7 @@
   <section id="materialsBox" class="table-card" style="display:none;">
     <div class="tbl">
       <h3>MATERIALES PARA EL PLAN DE HOY</h3>
-      <p class="mini muted">Las cantidades ya consideran el <b>factor</b> multiplicado por la <b>cantidad</b> de cada modelo.</p>
+      <p class="mini muted">Las cantidades ya consideran el <b>factor</b> multiplicado por la <b>cantidad</b> de cada modelo (y se <b>redondean hacia arriba</b> por material).</p>
       <div style="display:flex; gap:12px; justify-content:flex-end; margin:8px 0 10px">
         <button class="btn btn-compact" id="btnCheckAllGeneral">MARCAR TODO</button>
       </div>
@@ -126,7 +126,7 @@
   const fmt = n => (n||0).toLocaleString('es-MX');
   const todayKey = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
   const prettyDate = () => new Date().toLocaleDateString('es-MX', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
-  const getParams = () => { const p = new URLSearchParams(location.search); return { kb: p.get('kb')||'HA', line: p.get('line')||'L17' }; };
+  const getParams = () => { const p = new URLSearchParams(location.search); return { kb: (p.get('kb')||'HA').trim(), line: (p.get('line')||'L17').trim() }; };
   const sanitize = (s='') => String(s).replace(/[<>&]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]));
 
   const SID_KEY = "materialistas.sessionId";
@@ -136,7 +136,8 @@
   // -------- estado --------
   const params    = getParams();
   const dateKey   = todayKey();
-  const planDoc   = doc(db, 'KB', params.kb, 'lines', params.line, 'plans', dateKey);
+  const base      = ['KB', params.kb, 'lines', params.line];
+  const planDoc   = doc(db, ...base, 'plans', dateKey);
 
   const pageTitle = qs('#pageTitle');
   const dateSub   = qs('#dateSub');
@@ -145,6 +146,7 @@
   const generalEl = qs('#generalMat');
   const kanbanEl  = qs('#kanbanMat');
 
+  qs('#btnBack').onclick = () => history.length>1 ? history.back() : (location.href='index.html');
   pageTitle.textContent = `PLAN DE HOY`;
   dateSub.textContent   = `(${prettyDate()})`;
 
@@ -159,7 +161,7 @@
   function watchModel(id){
     if (modelCache.has(id)) return;
     const unsubs = [];
-    const kbDocRef = ['KB', params.kb, 'lines', params.line, 'models', id];
+    const kbDocRef = [...base, 'models', id];
 
     const setMaterialsFromData = (data, pathArr)=>{
       const embed = Array.isArray(data?.materials) ? data.materials : null;
@@ -178,19 +180,22 @@
       unsubs.push(u);
     };
 
-    unsubs.push(onSnapshot(doc(db, ...kbDocRef), snap=>{
-      if (snap.exists()) setMaterialsFromData(snap.data()||{}, kbDocRef);
-    }));
-    const legacy = ['lines', params.line, 'models', id];
-    unsubs.push(onSnapshot(doc(db, ...legacy), snap=>{
-      if (snap.exists()) setMaterialsFromData(snap.data()||{}, legacy);
-    }));
+    // Esquema nuevo + legado (compat)
+    import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js").then(({onSnapshot:docSnap})=>{
+      unsubs.push(docSnap(doc(db, ...kbDocRef), snap=>{
+        if (snap.exists()) setMaterialsFromData(snap.data()||{}, kbDocRef);
+      }));
+      const legacy = ['lines', params.line, 'models', id];
+      unsubs.push(docSnap(doc(db, ...legacy), snap=>{
+        if (snap.exists()) setMaterialsFromData(snap.data()||{}, legacy);
+      }));
+    });
 
     modelCache.set(id, { materials: [], unsubs });
   }
 
   let plan = []; // [{id,name,qty,done}]
-  // 🔸 Cuando un input está activo, NO redibujamos la lista
+  // Evitamos re-render de la lista mientras se escribe, pero sí recalculamos materiales en vivo
   let suspendRender = false;
 
   onSnapshot(
@@ -206,7 +211,6 @@
 
       plan = items.map(x => ({ id:x.id, name:x.name||x.display||'SIN NOMBRE', qty:Number(x.qty||0), done:!!x.done }));
 
-      // Si estamos escribiendo en alguna cantidad, no toques el DOM.
       if (!suspendRender && !snap.metadata.hasPendingWrites){
         renderPlan();
         renderIfVisible();
@@ -250,138 +254,155 @@
     });
   }
 
+  // Obtener plan EN VIVO desde el DOM (para cálculos en tiempo real)
+  function planLiveFromDOM(){
+    const rows = qsa('.plan-row');
+    return rows.map(r=>{
+      const idx = Number(r.dataset.idx||0);
+      const qty = Number(r.querySelector('.qty-in')?.value || 0);
+      return { ...plan[idx], qty };
+    });
+  }
+
   function addRowEventHandlers(){
     qsa('.plan-row').forEach(row=>{
       const idx = Number(row.dataset.idx);
 
-      // Hecho / no hecho
-      row.querySelector('.chk-done')?.addEventListener('change', e=>{
-        plan[idx].done = e.target.checked;
-        row.classList.toggle('done', plan[idx].done);
-        pushPlan(true);
+      // Hecho / no hecho (persistente)
+      row.querySelector('.chk-done')?.addEventListener('change', async (e)=>{
+        const done = !!e.target.checked;
+        await setDoc(planDoc, { items: plan.map((x,i)=> i===idx ? {...x, done} : x) }, { merge:true });
       });
 
-      const qty = row.querySelector('.qty-in');
-      if (qty){
-        // mientras editas, suspendemos render
-        qty.addEventListener('focus', ()=>{ suspendRender = true; });
-        qty.addEventListener('blur',  ()=>{
-          suspendRender = false;
-          plan[idx].qty = Math.max(0, Number(qty.value||0));
-          renderIfVisible();   // actualizar totales si la caja está abierta
-          pushPlan(false, true); // guarda inmediato al salir
-        });
-        qty.addEventListener('input', e=>{
-          plan[idx].qty = Math.max(0, Number(e.target.value||0));
-          if (materialsBox.style.display==='block') renderAggregated();
-          pushPlan(); // debounce
-        });
-        // Enter = quitar foco (útil en móvil)
-        qty.addEventListener('keydown', ev=>{
-          if (ev.key === 'Enter') qty.blur();
-        });
-      }
+      // Cantidad:
+      const qtyIn = row.querySelector('.qty-in');
 
-      // Eliminar
-      row.querySelector('.trash')?.addEventListener('click', ()=>{
-        const copy = plan.slice(); copy.splice(idx,1); plan = copy; pushPlan(true);
+      // a) En vivo: recalcular materiales al teclear (sin escribir a Firestore)
+      qtyIn?.addEventListener('input', ()=>{
+        if (materialsVisible) renderMaterials(planLiveFromDOM());
       });
 
-      // Drag & drop
-      row.addEventListener('dragstart', ev=>{
-        ev.dataTransfer.setData('text/plain', idx.toString());
-        row.style.opacity = .5;
+      // b) Evitar re-render de la lista mientras se escribe
+      qtyIn?.addEventListener('focus', ()=> suspendRender = true);
+
+      // c) Al terminar (blur) sí persistimos la cantidad
+      qtyIn?.addEventListener('blur',  async ()=>{
+        suspendRender = false;
+        const qty = Number(qtyIn.value||0);
+        await setDoc(planDoc, { items: plan.map((x,i)=> i===idx ? {...x, qty} : x) }, { merge:true });
       });
-      row.addEventListener('dragend', ()=> row.style.opacity = '');
-      row.addEventListener('dragover', ev=> ev.preventDefault());
-      row.addEventListener('drop', ev=>{
-        ev.preventDefault();
-        const from = Number(ev.dataTransfer.getData('text/plain'));
-        const to   = Number(row.dataset.idx);
-        if (isNaN(from) || isNaN(to) || from===to) return;
-        const copy = plan.slice();
-        const [moved] = copy.splice(from,1);
-        copy.splice(to,0,moved);
-        plan = copy;
-        pushPlan(true);
+
+      // Eliminar fila
+      row.querySelector('.trash')?.addEventListener('click', async ()=>{
+        const next = plan.filter((_,i)=> i!==idx);
+        await setDoc(planDoc, { items: next }, { merge:true });
+        if (materialsVisible) renderMaterials(planLiveFromDOM());
+      });
+
+      // Drag & drop para reordenar
+      row.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', String(idx));
+      });
+      row.addEventListener('dragover', e=> e.preventDefault());
+      row.addEventListener('drop', async e=>{
+        e.preventDefault();
+        const from = Number(e.dataTransfer.getData('text/plain'));
+        const to   = idx;
+        if (Number.isNaN(from) || from===to) return;
+        const arr = plan.slice();
+        const [moved] = arr.splice(from,1);
+        arr.splice(to,0,moved);
+        await setDoc(planDoc, { items: arr }, { merge:true });
+        if (materialsVisible) renderMaterials(planLiveFromDOM());
       });
     });
   }
 
-  // Empuja cambios del array completo
-  let pushTimer=null;
-  function pushPlan(coalesceOrder=false, flushNow=false){
-    clearTimeout(pushTimer);
-    const write = async ()=>{
-      const items = plan.map(p => ({ id:p.id, name:p.name, qty:Number(p.qty||0), done:!!p.done }));
-      await setDoc(planDoc, { items }, { merge:true });
-    };
-    if (flushNow){ write(); return; }
-    // debounce más largo para que no “rebote” el DOM al teclear
-    pushTimer = setTimeout(write, 500);
-  }
+  // ------ Materiales agregados (sumatoria por línea con REDONDEO ARRIBA) ------
+  function materialKey(m){ return (m.number||'').trim(); }
 
-  // ------- materiales totales -------
-  function normalizeName(s=''){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
-  function isKanbanName(name=''){ const n=normalizeName(name); return /\bbase\b/.test(n) || /\btapa\b/.test(n); }
+  // acepta un arreglo de items (plan) para permitir cálculos “live”
+  function sumMaterials(planItems){
+    const sumGeneral = new Map(); // number -> {name, number, totalRaw}
+    const sumKanban  = new Map();
 
-  function aggregateMaterials(){
-    const agg={}, aggK={};
-    for (const it of plan){
-      const q = Number(it.qty||0); if (!q) continue;
+    for (const it of planItems){
+      const qty = Number(it.qty||0);
+      if (!qty) continue;
       const mats = modelCache.get(it.id)?.materials || [];
       for (const m of mats){
-        const part=(m.number||'').trim(); const f=Number(m.factor||0); const add=q*f;
-        if (!part || add<=0) continue;
-        const target = isKanbanName(m.name) ? aggK : agg;
-        if (!target[part]) target[part]={name:m.name||'', number:part, total:0};
-        target[part].total += add;
+        const key = materialKey(m);
+        if (!key) continue;
+        const isKanban = /\b(base|tapa|kanban)\b/i.test(m.name||"");
+        const raw = qty * Number(m.factor||0); // puede ser decimal
+        const dst = isKanban ? sumKanban : sumGeneral;
+        const cur = dst.get(key) || { name:m.name||'', number:m.number||'', totalRaw:0 };
+        cur.totalRaw += raw; // acumulamos crudo
+        dst.set(key, cur);
       }
     }
-    return {
-      general: Object.values(agg).sort((a,b)=> a.name.localeCompare(b.name)),
-      kanban : Object.values(aggK).sort((a,b)=> a.name.localeCompare(b.name)),
-    };
+
+    // Al final, redondeamos hacia arriba por material
+    const mapToArray = (map)=> Array.from(map.values()).map(x=>({
+      name: x.name, number: x.number, qty: Math.ceil(x.totalRaw)
+    })).sort((a,b)=> String(a.number).localeCompare(String(b.number)));
+
+    return { general: mapToArray(sumGeneral), kanban: mapToArray(sumKanban) };
   }
 
-  function renderAggregated(){
-    const {general, kanban} = aggregateMaterials();
-    const G = general.length ? general.map(r=>`
-      <tr><td>${sanitize(r.name)}</td><td>${sanitize(r.number)}</td><td class="right">${fmt(r.total)}</td><td class="center"><input type="checkbox" class="chk-g"></td></tr>
-    `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales (asigna cantidades a los modelos)</td></tr>`;
-    const K = kanban.length ? kanban.map(r=>`
-      <tr><td>${sanitize(r.name)}</td><td>${sanitize(r.number)}</td><td class="right">${fmt(r.total)}</td><td class="center"><input type="checkbox" class="chk-k"></td></tr>
-    `).join('') : `<tr><td colspan="4" class="center muted">Sin materiales Kanban</td></tr>`;
-    generalEl.innerHTML = G; kanbanEl.innerHTML = K;
+  // opcional planOverride para cálculos en vivo
+  function renderMaterials(planOverride){
+    const basePlan = planOverride || plan;
+    const {general, kanban} = sumMaterials(basePlan);
+    const rowHTML = (r)=>`
+      <tr>
+        <td>${sanitize(r.name)}</td>
+        <td>${sanitize(r.number)}</td>
+        <td class="right">${fmt(r.qty)}</td>
+        <td class="center"><input type="checkbox" class="chk"></td>
+      </tr>`;
+    generalEl.innerHTML = general.map(rowHTML).join('');
+    kanbanEl.innerHTML  = kanban.map(rowHTML).join('');
   }
-  function renderIfVisible(){ if (materialsBox.style.display==='block') renderAggregated(); }
 
-  // -------- UI general --------
-  qs('#btnBack').onclick = () => history.length>1 ? history.back() : (location.href='index.html');
-  qs('#btnMaterials').onclick = ()=>{ const open = !(materialsBox.style.display==='block'); materialsBox.style.display = open?'block':'none'; if (open) renderAggregated(); };
-  qs('#btnCheckAllGeneral').onclick = ()=> qsa('.chk-g').forEach(c=> c.checked = true);
-  qs('#btnCheckAllKanban').onclick  = ()=> qsa('.chk-k').forEach(c=> c.checked = true);
+  let materialsVisible = false;
+  function renderIfVisible(){ if (materialsVisible) renderMaterials(planLiveFromDOM()); }
 
-  // Envío a 311 por dispositivo (misma sesión que 311.html)
-  async function ensureUserDoc(){
-    const ref = doc(db, "KB", params.kb, "lines", params.line, "users", sessionId);
-    await setDoc(ref, { active:true, updatedAt: serverTimestamp() }, { merge:true });
+  // Mostrar/ocultar panel de materiales
+  qs('#btnMaterials').onclick = ()=>{
+    materialsVisible = !materialsVisible;
+    materialsBox.style.display = materialsVisible ? 'block' : 'none';
+    if (materialsVisible) renderMaterials(planLiveFromDOM());
+  };
+
+  // Marcar todo
+  function toggleAll(box, on){
+    Array.from(box.querySelectorAll('.chk')).forEach(c=> c.checked = on);
   }
-  async function addRowsTo(kind, selector){
-    await ensureUserDoc();
-    const updates=[];
-    qsa(selector).forEach(tr=>{
-      const chk = tr.querySelector('input[type="checkbox"]'); if (!chk?.checked) return;
-      const num = tr.children[1]?.textContent.trim();
-      const qty = Number((tr.children[2]?.textContent||'0').replace(/[^\d]/g,'')) || 0;
-      if (!num || qty<=0) return;
-      const ref = doc(db, "KB", params.kb, "lines", params.line, "users", sessionId, kind, num);
-      updates.push(setDoc(ref, { number:num, qty: increment(qty) }, { merge:true }));
-    });
-    if (updates.length) await Promise.all(updates);
+  qs('#btnCheckAllGeneral').onclick = ()=> toggleAll(generalEl, true);
+  qs('#btnCheckAllKanban').onclick  = ()=> toggleAll(kanbanEl,  true);
+
+  // Envío a 311 por LÍNEA — usa las cantidades ya redondeadas
+  async function sendChecked(box, subcollection){
+    const rows = Array.from(box.querySelectorAll('tr')).filter(tr => tr.querySelector('.chk')?.checked);
+    if (!rows.length){ alert('No has marcado materiales.'); return; }
+    const updates = rows.map(tr=>{
+      const tds = tr.querySelectorAll('td');
+      const name = tds[0]?.textContent?.trim() || '';
+      const number = tds[1]?.textContent?.trim() || '';
+      const qty = Number((tds[2]?.textContent||'').replace(/[^\d.-]/g,''))||0; // ya viene redondeado
+      return { name, number, qty };
+    }).filter(x=> x.number && x.qty>0);
+
+    for (const r of updates){
+      const docRef = doc(db, ...base, 'users', sessionId, subcollection, r.number);
+      await setDoc(docRef, { number:r.number, name:r.name, qty: increment(r.qty), updatedAt: serverTimestamp() }, { merge:true });
+    }
+    alert('Enviado a 311.');
   }
-  qs('#btnOKGeneral').onclick = async ()=>{ await addRowsTo("cart", "#generalMat tr");   alert('Material agregado a 311 (general).'); };
-  qs('#btnOKKanban').onclick  = async ()=>{ await addRowsTo("kanbanCart", "#kanbanMat tr"); alert('Material agregado a 311 (Kanban).'); };
+
+  qs('#btnOKGeneral').onclick = ()=> sendChecked(generalEl, 'cart');
+  qs('#btnOKKanban').onclick  = ()=> sendChecked(kanbanEl,  'kanbanCart');
 </script>
 </body>
 </html>

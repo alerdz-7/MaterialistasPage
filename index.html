@@ -5,19 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Materialistas Page</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* KPI superior (cajas recicladas) */
+    .topbar{
+      max-width:1200px; margin:16px auto 0; padding:0 12px;
+      display:flex; align-items:center; gap:12px; justify-content:space-between;
+    }
+    .kpi{
+      display:flex; align-items:center; gap:10px; background:#0f2533; color:#fff;
+      border-radius:12px; padding:10px 14px; box-shadow:0 6px 18px rgba(0,0,0,.25);
+      border:2px solid rgba(255,255,255,.12);
+    }
+    .kpi strong{ font-size:20px; letter-spacing:.3px }
+    .btn{ background:#0d8e8a; color:#fff; border:none; border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer; }
+  </style>
 </head>
 <body>
   <!-- NAVBAR -->
-<header class="navbar">
-  <div class="logo">
-    <img src="img/logo.png" alt="Logo">
+  <header class="navbar">
+    <div class="logo">
+      <img src="img/logo.png" alt="Logo">
+    </div>
+    <h1 class="title">MATERIALISTAS PAGE</h1>
+  </header>
+
+  <!-- KPI: Cajas recicladas HOY (todas las líneas) -->
+  <div class="topbar">
+    <div class="kpi" title="Suma en vivo de todas las líneas (se reinicia cada día)">
+      <span>Cajas recicladas HOY:</span>
+      <strong id="allBoxesTotal">0</strong>
+    </div>
+    <button class="btn" id="btnCalendar">Ver calendario</button>
   </div>
-  <h1 class="title">MATERIALISTAS PAGE</h1>
 
-</header>
-
-
-  <!-- GRID DE BOTONES -->
+  <!-- GRID DE BOTONES (igual que tu index) -->
   <main class="grid-container">
     <button class="grid-btn" onclick="window.location.href='SWITCHES/index.html'">SWITCHES</button>
     <button class="grid-btn" onclick="window.location.href='AFCI/index.html'">AFCI</button>
@@ -33,6 +54,41 @@
     <button class="grid-btn" onclick="window.location.href='1POLO/index.html'">1 POLO</button>
   </main>
 
+  <!-- Tu JS actual (si lo usas) -->
   <script src="script.js"></script>
+
+  <!-- Firebase: contador en vivo de cajas (todas las líneas) -->
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module">
+    import { db } from "./firebase-config.js";
+    import {
+      collectionGroup, onSnapshot
+    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    const todayKey = ()=>{
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    };
+
+    // Sin filtros (para no requerir índices). Filtramos por fecha en cliente.
+    const ref = collectionGroup(db, "boxes_days");
+    onSnapshot(ref, snap=>{
+      let total = 0;
+      const today = todayKey();
+      snap.forEach(doc=>{
+        const data = doc.data() || {};
+        if (String(data.dateKey) === today){
+          total += Number(data.total || 0);
+        }
+      });
+      document.getElementById("allBoxesTotal").textContent = total.toLocaleString("es-MX");
+    }, err=>{
+      console.error("Error leyendo boxes_days:", err);
+      document.getElementById("allBoxesTotal").textContent = "0";
+    });
+
+    // Abrir calendario histórico
+    document.getElementById("btnCalendar").onclick = ()=> location.href = "cajas.html";
+  </script>
 </body>
 </html>

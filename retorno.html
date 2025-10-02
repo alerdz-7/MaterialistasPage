@@ -21,8 +21,7 @@
       background:#223244; color:#25b7a7; font-weight:700; padding:16px;
       border-top-left-radius:6px; border-top-right-radius:6px;
       border-bottom:2px solid rgba(255,255,255,.06);
-      text-align:center;
-      letter-spacing:.02em;
+      text-align:center; letter-spacing:.02em;
     }
     .tabla thead th:nth-child(1){ width:65%; }
     .tabla thead th:nth-child(2){ width:35%; }
@@ -38,8 +37,6 @@
     .copyFoot{
       max-width:920px; margin:10px auto 0; display:flex; align-items:center; gap:14px; color:#25b7a7;
     }
-
-    /* Botonera inferior: Agregar fila + Guardar */
     .add-row-wrap{ display:flex; justify-content:center; gap:10px; margin:16px 0 0; }
     .btn-round{ border-radius:999px; padding:12px 18px; }
 
@@ -51,7 +48,6 @@
     .hitem{ background:#0b1d2a; border-radius:10px; padding:10px; }
     .hhead{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
     .small{ opacity:.85; font-size:.95rem; color:#9dd6cf; }
-    .x{ background:#213444; color:#fff; border:none; border-radius:10px; padding:8px 12px; cursor:pointer; }
   </style>
 </head>
 <body>
@@ -64,7 +60,6 @@
 <main class="wrap">
   <h2 class="detalle-titulo" id="title" style="text-align:center">RETORNO — HA / L17</h2>
 
-  <!-- Arriba: Historial · Copiar · Borrar -->
   <div class="toolbar">
     <button class="btn" id="btnHist">Historial</button>
     <button class="btn" id="btnCopy">Copiar</button>
@@ -82,7 +77,6 @@
       <tbody id="tbody"></tbody>
     </table>
 
-    <!-- Abajo: Agregar fila + Guardar -->
     <div class="add-row-wrap">
       <button class="btn btn-round" id="btnAddRow">Agregar fila</button>
       <button class="btn btn-round" id="btnSave">Guardar</button>
@@ -99,7 +93,7 @@
   <div class="card">
     <div class="hhead">
       <h3 style="margin:0">Historial de retornos (últimos 5)</h3>
-      <button class="x" id="histClose">Cerrar</button>
+      <button class="btn btn-ghost" id="histClose">Cerrar</button>
     </div>
     <div class="hlist" id="histList"></div>
   </div>
@@ -110,25 +104,24 @@
   import { db } from "./firebase-config.js";
   import {
     collection, doc, getDoc, setDoc, onSnapshot, deleteDoc,
-    serverTimestamp, addDoc, query, orderBy, limit, Timestamp
+    serverTimestamp, addDoc, query, orderBy, limit, Timestamp, getDocs
   } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
   const $ = s => document.querySelector(s);
 
-  /* ====== Parámetros kb/line ====== */
+  // ====== Parámetros kb/line (aislados por línea) ======
   const params = new URLSearchParams(location.search);
-  const KB = params.get('kb')   || 'HA';
-  const LINE = params.get('line') || 'L17';
+  const KB = (params.get('kb')   || 'HA').trim();
+  const LINE = (params.get('line') || 'L17').trim();
   $('#title').textContent = `RETORNO — ${KB} / ${LINE}`;
+  $('#backBtn').onclick = () => history.length>1 ? history.back() : (location.href = "./index.html");
 
-  $('#backBtn').onclick = () => history.back();
+  // ====== Refs Firestore por KB/Línea ======
+  const basePath  = ["KB", KB, "lines", LINE];
+  const currentRef= doc(db, ...basePath, "retorno", "current");
+  const historyCol= collection(db, ...basePath, "retorno_history");
 
-  /* ====== Refs Firestore ====== */
-  const basePath = ["KB", KB, "lines", LINE];
-  const currentRef   = doc(db, ...basePath, "retorno", "current");
-  const historyCol   = collection(db, ...basePath, "retorno_history");
-
-  /* ====== Estado / render ====== */
+  // ====== Estado / render ======
   const tbody = $('#tbody');
   let localRows = [];
 
@@ -156,7 +149,6 @@
   onSnapshot(currentRef, snap=>{
     const data = snap.data() || {};
     renderRows(data.rows || []);
-    // sello de tiempo "Copiado el ..."
     if (data.copiedAt instanceof Timestamp){
       const d = data.copiedAt.toDate();
       $('#copyInfo').textContent = `Copiado el ${d.toLocaleDateString('es-MX')} a las ${d.toLocaleTimeString('es-MX', {hour:"2-digit", minute:"2-digit", hour12:true})}.`;
@@ -165,91 +157,66 @@
     }
   });
 
-  /* ====== Interacciones ====== */
   // Mantener localRows actualizado al escribir
   tbody.addEventListener('input', (e)=>{
     const i = Number(e.target.dataset.i);
-    if (e.target.classList.contains('part')){
-      localRows[i].part = e.target.value;
-    } else if (e.target.classList.contains('qty')){
-      localRows[i].qty = Number(e.target.value||0);
-    }
+    if (e.target.classList.contains('part'))  localRows[i].part = e.target.value;
+    if (e.target.classList.contains('qty'))   localRows[i].qty  = Number(e.target.value||0);
   });
 
-  // Agregar fila (debajo)
-  $('#btnAddRow').onclick = ()=>{
-    localRows.push({ part:"A7B9150132", qty:0 });
-    renderRows(localRows);
-  };
+  // Agregar fila
+  $('#btnAddRow').onclick = ()=>{ localRows.push({ part:"", qty:0 }); renderRows(localRows); };
 
-  // Guardar (ahora abajo)
+  // Guardar retorno actual y registrar versión en historial
   $('#btnSave').onclick = async ()=>{
-    await setDoc(currentRef, { rows: localRows, updatedAt: serverTimestamp() }, { merge:true });
-    await addDoc(historyCol, { rows: localRows, createdAt: serverTimestamp() });
-    alert('Retorno guardado.');
-  };
-
-  // Copiar (arriba)
-  $('#btnCopy').onclick = async ()=>{
-    const lines = localRows
-      .filter(r=> (r.part||"").trim()!=="" && Number(r.qty)>0 )
-      .map(r=> `${(r.part||"").trim()}\t${Number(r.qty)}`);
-    const txt = lines.join('\n') || '';
-    try{
-      await navigator.clipboard.writeText(txt);
-      await setDoc(currentRef, { copiedAt: serverTimestamp() }, { merge:true });
-      alert('Copiado al portapapeles.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo copiar.');
+    const clean = localRows
+      .map(r=>({ part:String(r.part||"").trim(), qty: Number(r.qty)||0 }))
+      .filter(r=> r.part && r.qty>0);
+    await setDoc(currentRef, { rows: clean, updatedAt: serverTimestamp() }, { merge:true });
+    if (clean.length){
+      await addDoc(historyCol, { rows: clean, createdAt: serverTimestamp() });
     }
+    alert("Guardado.");
   };
 
-  // Borrar actual (arriba)
+  // Copiar (tabulado)
+  $('#btnCopy').onclick = async ()=>{
+    const snap = await getDoc(currentRef);
+    const data = snap.data() || {};
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    if (!rows.length){ alert("No hay materiales para copiar."); return; }
+    const text = rows.map(r=>`${r.part}\t${Number(r.qty)||0}`).join("\n");
+    await navigator.clipboard.writeText(text);
+    await setDoc(currentRef, { copiedAt: serverTimestamp() }, { merge:true });
+  };
+
+  // Borrar retorno actual (no historial)
   $('#btnClear').onclick = async ()=>{
-    if (!confirm('¿Borrar el retorno actual?')) return;
     await deleteDoc(currentRef);
+    renderRows([]);
   };
 
-  // Historial (arriba)
+  // Historial (últimos 5)
   const histModal = $('#histModal');
+  const histList  = $('#histList');
   $('#btnHist').onclick = async ()=>{
-    const q = query(historyCol, orderBy('createdAt','desc'), limit(5));
-    const { getDocs } = await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js");
-    const snap = await getDocs(q);
-
-    const cont = $('#histList');
-    cont.innerHTML = '';
-
-    snap.forEach(docSnap=>{
-      const d = docSnap.data()||{};
-      const when = d.createdAt?.toDate?.();
-      const title = when ? `${when.toLocaleDateString('es-MX')} — ${when.toLocaleTimeString('es-MX',{hour:"2-digit",minute:"2-digit",hour12:true})}` : '(sin fecha)';
-      const rows = (d.rows||[]).filter(r=> (r.part||"").trim()!=="" && Number(r.qty)>0 );
-      const text = rows.map(r=>`${r.part}\t${r.qty}`).join('\n');
-
-      const item = document.createElement('div');
-      item.className = 'hitem';
-      item.innerHTML = `
-        <div class="hhead">
-          <div class="small">${title}</div>
-          <div style="display:flex; gap:8px">
-            <button class="x copyOne">Copiar</button>
-          </div>
-        </div>
-        <pre style="white-space:pre-wrap; margin:0; color:#bfe9e3">${text||'(Vacío)'}</pre>
-      `;
-      item.querySelector('.copyOne').onclick = async ()=>{
-        try{ await navigator.clipboard.writeText(text||''); alert('Copiado.'); }catch(e){ alert('No se pudo copiar'); }
-      };
-      cont.appendChild(item);
-    });
-
-    histModal.style.display='flex';
-    histModal.setAttribute('aria-hidden','false');
+    const qy = query(historyCol, orderBy("createdAt","desc"), limit(5));
+    const snap = await getDocs(qy);
+    const items = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    if (!items.length){
+      histList.innerHTML = `<div class="small" style="text-align:center">Sin registros todavía</div>`;
+    }else{
+      histList.innerHTML = items.map(it=>{
+        const when = it.createdAt?.toDate?.()?.toLocaleString?.("es-MX",{hour12:true}) || "";
+        const body = (it.rows||[]).map(r=>`${r.part}\t${Number(r.qty)||0}`).join("<br>");
+        return `<div class="hitem"><div class="hhead"><div class="small">${when}</div></div>${body}</div>`;
+      }).join("");
+    }
+    histModal.style.display = "flex";
+    histModal.setAttribute("aria-hidden","false");
   };
-  $('#histClose').onclick = ()=>{ histModal.style.display='none'; histModal.setAttribute('aria-hidden','true'); };
-  histModal.addEventListener('click', e=>{ if(e.target===histModal){ histModal.style.display='none'; histModal.setAttribute('aria-hidden','true'); } });
+  $('#histClose').onclick = ()=>{ histModal.style.display="none"; histModal.setAttribute("aria-hidden","true"); };
+  histModal.addEventListener("click", e=>{ if(e.target===histModal) $('#histClose').click(); });
 </script>
 </body>
 </html>

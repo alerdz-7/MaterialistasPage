@@ -46,7 +46,7 @@
       <h3>Material</h3>
       <div class="actions">
         <button class="btn" id="copyMain">Copiar</button>
-        <button class="btn btn-danger" id="clearMain">Borrar</button>
+        <button class="btn btn-danger" id="clearMain" title="Borra SOLO tu lista en esta línea">Borrar</button>
         <button class="btn btn-compact btn-ghost" id="histMain">🕘 Historial</button>
       </div>
     </div>
@@ -69,7 +69,7 @@
       <h3>Kanban</h3>
       <div class="actions">
         <button class="btn" id="copyKanban">Copiar</button>
-        <button class="btn btn-danger" id="clearKanban">Borrar</button>
+        <button class="btn btn-danger" id="clearKanban" title="Borra SOLO tu lista en esta línea">Borrar</button>
         <button class="btn btn-compact btn-ghost" id="histKanban">🕘 Historial</button>
       </div>
     </div>
@@ -101,22 +101,28 @@
 <!-- Firebase -->
 <script type="module" src="firebase-config.js"></script>
 <script type="module">
-  import { db } from "./firebase-config.js";
+  import { db } from "./firebase-config.js"; /* export db en tu proyecto :contentReference[oaicite:3]{index=3} */
   import {
-    collection, collectionGroup, onSnapshot, getDocs, deleteDoc, doc, addDoc,
-    orderBy, query, setDoc, serverTimestamp, Timestamp, limit
+    collection, onSnapshot, deleteDoc, doc, addDoc, getDocs, getDoc,
+    orderBy, query, setDoc, serverTimestamp, Timestamp
   } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
+  // ===== util =====
   const fmt = n => (Number(n||0)).toLocaleString("es-MX");
   const qs  = s => document.querySelector(s);
   const qsa = s => Array.from(document.querySelectorAll(s));
   const p   = new URLSearchParams(location.search);
-  const kb   = p.get("kb")   || "HA";
-  const line = p.get("line") || "L17";
+  const kb   = (p.get("kb")||"HA").trim();
+  const line = (p.get("line")||"L17").trim();
 
+  // Navegación + título contextual (muestra KB/Línea)
   qs("#backBtn").onclick = () => history.length > 1 ? history.back() : (location.href = "index.html");
   qs("#titleH2").textContent = `MATERIAL POR PEDIR EN 311 — ${kb} / ${line}`;
 
+  // ===== BasePath por KB/LÍNEA (todo queda aislado aquí) =====
+  const base = ["KB", kb, "lines", line];
+
+  // ===== Render básico =====
   const tbodyMain   = qs("#tblMain");
   const tbodyKanban = qs("#tblKanban");
 
@@ -132,8 +138,8 @@
     qs("#emptyKanban").style.display = tbodyKanban.children.length ? "none" : "block";
   }
 
-  // ===== 311 COMPARTIDA (suma todos los users/*/(cart|kanbanCart)) =====
-  const usersCol = collection(db, "KB", kb, "lines", line, "users");
+  // ===== Agregado compartido por LÍNEA (users/*/(cart|kanbanCart)) =====
+  const usersCol = collection(db, ...base, "users");
   const perUserMain   = new Map();
   const perUserKanban = new Map();
   const perUserUnsubs = new Map();
@@ -157,27 +163,28 @@
   function listenUserSub(userId){
     if (perUserUnsubs.has(userId)) return;
     const unsubs = {};
-    unsubs.cart = onSnapshot(query(collection(db, "KB", kb, "lines", line, "users", userId, "cart"), orderBy("number","asc")),
+    // carrito "general"
+    unsubs.cart = onSnapshot(query(collection(db, ...base, "users", userId, "cart"), orderBy("number","asc")),
       snap=>{
         const m = new Map();
         snap.docs.forEach(d=>{
           const data=d.data()||{};
-          const num = data.number || d.id;
+          const num = String(data.number || d.id).trim();
           const qty = Number(data.qty||0);
-          if (qty>0) m.set(num, qty);
+          if (num && qty>0) m.set(num, qty);
         });
         perUserMain.set(userId, m);
         recomputeAndPaint();
       });
-
-    unsubs.kanban = onSnapshot(query(collection(db, "KB", kb, "lines", line, "users", userId, "kanbanCart"), orderBy("number","asc")),
+    // carrito "kanban"
+    unsubs.kanban = onSnapshot(query(collection(db, ...base, "users", userId, "kanbanCart"), orderBy("number","asc")),
       snap=>{
         const m = new Map();
         snap.docs.forEach(d=>{
           const data=d.data()||{};
-          const num = data.number || d.id;
+          const num = String(data.number || d.id).trim();
           const qty = Number(data.qty||0);
-          if (qty>0) m.set(num, qty);
+          if (num && qty>0) m.set(num, qty);
         });
         perUserKanban.set(userId, m);
         recomputeAndPaint();
@@ -202,106 +209,109 @@
     snap.docs.forEach(d=> listenUserSub(d.id));
   });
 
-  // ===== “Copiado el …” + Historial =====
-  const metaRef = doc(db, "KB", kb, "lines", line, "shared311_meta", "state");
+  // ===== Meta + Historial (aislados por LÍNEA) =====
+  const metaRef = doc(db, ...base, "shared311_meta", "state");
+  const histCol = collection(db, ...base, "shared311_history");
+
   onSnapshot(metaRef, snap=>{
     const data = snap.data()||{};
-    const toText = ts => ts ? `Copiado el ${ts.toDate().toLocaleDateString('es-MX')} a las ${ts.toDate().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', hour12:true })}` : '';
+    const toText = ts => ts instanceof Timestamp
+      ? `Copiado el ${ts.toDate().toLocaleDateString('es-MX')} a las ${ts.toDate().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', hour12:true })}`
+      : '';
     qs("#copiedMain").textContent   = toText(data.mainCopiedAt || null);
     qs("#copiedKanban").textContent = toText(data.kanbanCopiedAt || null);
   });
 
-  // Historial helpers
-  const histCol = collection(db, "KB", kb, "lines", line, "shared311_history");
+  // ===== Helpers de copiar/pegar =====
+  function tableToList(tbody){
+    return Array.from(tbody.querySelectorAll("tr")).map(tr=>{
+      const tds = tr.querySelectorAll("td");
+      return { number: (tds[0]?.textContent||"").trim(), qty: Number((tds[1]?.textContent||"").replace(/[^\d.-]/g,""))||0 };
+    }).filter(x=>x.number && x.qty>0);
+  }
+  async function copyList(list, scope){ // scope: "main" | "kanban"
+    if (!list.length){ alert("No hay materiales para copiar."); return; }
+    const text = list.map(r => `${r.number}\t${r.qty}`).join("\n");
+    await navigator.clipboard.writeText(text);
+    await setDoc(metaRef, scope==="main" ? { mainCopiedAt: serverTimestamp() } : { kanbanCopiedAt: serverTimestamp() }, { merge:true });
+    await addDoc(histCol, { scope, items: list, createdAt: serverTimestamp() });
+    return text;
+  }
+
+  // Copiar
+  qs("#copyMain").onclick   = async ()=>{ const list = tableToList(tbodyMain);   await copyList(list, "main"); };
+  qs("#copyKanban").onclick = async ()=>{ const list = tableToList(tbodyKanban); await copyList(list, "kanban"); };
+
+  // ===== Borrar: SOLO mi carrito en ESTA línea =====
+  const SID_KEY = "materialistas.sessionId";
+  let sessionId = localStorage.getItem(SID_KEY);
+  if (!sessionId){ sessionId = Math.random().toString(36).slice(2); localStorage.setItem(SID_KEY, sessionId); }
+
+  async function clearFor(meRefPath){
+    const sub = collection(db, ...meRefPath);
+    const snap = await getDocs(sub);
+    await Promise.all(snap.docs.map(d => deleteDoc(doc(db, ...meRefPath, d.id))));
+  }
+  qs("#clearMain").onclick = async ()=>{
+    const me = [...base, "users", sessionId, "cart"];      // KB/kb/lines/line/users/{sessionId}/cart
+    await clearFor(me);
+  };
+  qs("#clearKanban").onclick = async ()=>{
+    const me = [...base, "users", sessionId, "kanbanCart"]; // KB/kb/lines/line/users/{sessionId}/kanbanCart
+    await clearFor(me);
+  };
+
+  // ===== Historial (solo de ESTA línea) =====
   const histModal = qs("#histModal");
   const histTitle = qs("#histTitle");
   const histList  = qs("#histList");
   qs("#histClose").onclick = ()=>{ histModal.style.display='none'; histModal.setAttribute('aria-hidden','true'); };
-  histModal.addEventListener('click', e=>{ if (e.target===histModal) qs("#histClose").click(); });
 
-  async function openHistory(type){
-    histTitle.textContent = type==='main' ? 'Historial de Material (últimas 5 copias)' : 'Historial de Kanban (últimas 5 copias)';
-    const qh = query(histCol, orderBy("copiedAt","desc"), limit(20)); // traer y filtrar por tipo
-    const snap = await getDocs(qh);
-    const list = snap.docs.map(d=>({ id:d.id, ...(d.data()||{}) })).filter(x=>x.type===type).slice(0,5);
-    if (!list.length){
-      histList.innerHTML = `<div class="muted">(Sin historial)</div>`;
+  async function openHistory(scope){
+    histTitle.textContent = scope==="main" ? "Historial — Material" : "Historial — Kanban";
+    const qy = query(histCol, orderBy("createdAt","desc"));
+    const snap = await getDocs(qy);
+    const items = snap.docs
+      .map(d=>({ id:d.id, ...d.data() }))
+      .filter(x=> x.scope===scope)
+      .slice(0, 10);
+
+    if (!items.length){
+      histList.innerHTML = `<div class="muted" style="text-align:center">Sin registros todavía</div>`;
     } else {
-      histList.innerHTML = list.map(h=>{
-        const dt = h.copiedAt?.toDate?.() || null;
-        const when = dt ? `${dt.toLocaleDateString('es-MX')} ${dt.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit', hour12:true})}` : '';
-        const tsv = (Array.isArray(h.items)?h.items:[]).map(r=>`${r.number}\t${fmt(r.qty)}`).join('\n');
+      histList.innerHTML = items.map(it=>{
+        const when = it.createdAt?.toDate?.()?.toLocaleString?.("es-MX",{hour12:true}) || "";
+        const body = (it.items||[]).map(r => `<div class="mono" style="opacity:.9">${r.number}\t${r.qty}</div>`).join("");
         return `
           <div class="hist-item">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;">
-              <div class="muted tiny">Copiado: ${when}</div>
-              <div class="hist-actions"><button class="btn btn-compact" data-copy="${encodeURIComponent(tsv)}">Copiar</button></div>
+            <div class="head" style="display:flex; align-items:center; justify-content:space-between; gap:8px">
+              <div class="tiny muted">${when}</div>
+              <div class="hist-actions">
+                <button class="btn btn-compact" data-copy="${it.id}">Copiar</button>
+              </div>
             </div>
-            <pre class="mono" style="white-space:pre-wrap; margin:0">${tsv.replace(/</g,'&lt;')}</pre>
+            ${body}
           </div>
         `;
-      }).join('');
-      histList.querySelectorAll('[data-copy]').forEach(b=>{
-        b.addEventListener('click', async ()=>{ await navigator.clipboard.writeText(decodeURIComponent(b.getAttribute('data-copy')||'')); });
+      }).join("");
+
+      // volver a copiar un snapshot del historial
+      qsa('[data-copy]').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const id = btn.getAttribute('data-copy');
+          const ref = doc(db, ...base, "shared311_history", id);
+          const s = await getDoc(ref);
+          const data = s.data()||{};
+          const txt = (data.items||[]).map(r=>`${r.number}\t${r.qty}`).join("\n");
+          await navigator.clipboard.writeText(txt);
+        };
       });
     }
-    histModal.style.display='flex'; histModal.setAttribute('aria-hidden','false');
+    histModal.style.display = 'flex';
+    histModal.setAttribute('aria-hidden', 'false');
   }
-  qs("#histMain").onclick = ()=> openHistory('main');
-  qs("#histKanban").onclick = ()=> openHistory('kanban');
-
-  function toTSV(tbody){
-    return Array.from(tbody.querySelectorAll("tr"))
-      .map(tr => `${tr.children[0].textContent}\t${tr.children[1].textContent}`)
-      .join("\n");
-  }
-  function copyText(text){
-    if (!text.trim()) { alert("No hay datos para copiar."); return false; }
-    navigator.clipboard.writeText(text);
-    return true;
-  }
-
-  async function prune(type){
-    // deja solo 5 por tipo
-    const snap = await getDocs(query(histCol, orderBy("copiedAt","desc")));
-    const perType = snap.docs.filter(d=>(d.data()?.type)===type);
-    const extra = perType.slice(5);
-    if (extra.length) await Promise.all(extra.map(d=> deleteDoc(d.ref)));
-  }
-
-  qs("#copyMain").onclick   = async ()=>{
-    const text = toTSV(tbodyMain);
-    if (copyText(text)){
-      await setDoc(metaRef, { mainCopiedAt: serverTimestamp() }, { merge:true });
-      // guarda historial
-      const items = Array.from(tbodyMain.querySelectorAll('tr')).map(tr=>({ number: tr.children[0].textContent, qty: Number((tr.children[1].textContent||'0').replace(/[^\d]/g,''))||0 }));
-      await addDoc(histCol, { type:'main', items, copiedAt: serverTimestamp() });
-      await prune('main');
-    }
-  };
-  qs("#copyKanban").onclick = async ()=>{
-    const text = toTSV(tbodyKanban);
-    if (copyText(text)){
-      await setDoc(metaRef, { kanbanCopiedAt: serverTimestamp() }, { merge:true });
-      // guarda historial
-      const items = Array.from(tbodyKanban.querySelectorAll('tr')).map(tr=>({ number: tr.children[0].textContent, qty: Number((tr.children[1].textContent||'0').replace(/[^\d]/g,''))||0 }));
-      await addDoc(histCol, { type:'kanban', items, copiedAt: serverTimestamp() });
-      await prune('kanban');
-    }
-  };
-
-  async function clearCollectionUnderUsers(subName){
-    const usersSnap = await getDocs(usersCol);
-    const ops = [];
-    for (const uDoc of usersSnap.docs){
-      const colRef = collection(db, "KB", kb, "lines", line, "users", uDoc.id, subName);
-      const snap = await getDocs(colRef);
-      snap.docs.forEach(d => ops.push(deleteDoc(d.ref)));
-    }
-    if (ops.length) await Promise.all(ops);
-  }
-  qs("#clearMain").onclick   = async ()=>{ await clearCollectionUnderUsers("cart");        };
-  qs("#clearKanban").onclick = async ()=>{ await clearCollectionUnderUsers("kanbanCart");  };
+  qs("#histMain").onclick   = ()=> openHistory("main");
+  qs("#histKanban").onclick = ()=> openHistory("kanban");
 </script>
 </body>
 </html>
